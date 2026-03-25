@@ -124,6 +124,13 @@ impl CliError {
 
 // ── JSON envelope ───────────────────────────────────────────────────────────
 
+fn to_json<T: Serialize>(value: &T) -> String {
+    // Serialising serde_json::Value or #[derive(Serialize)] types is infallible.
+    // If this ever fails, produce a minimal valid JSON error rather than panicking.
+    serde_json::to_string_pretty(value)
+        .unwrap_or_else(|e| format!(r#"{{"version":"1","status":"error","error":{{"code":"json_serialize","message":"{e}"}}}}"#))
+}
+
 fn print_success<T: Serialize>(format: Format, data: &T) {
     match format {
         Format::Json => {
@@ -132,7 +139,7 @@ fn print_success<T: Serialize>(format: Format, data: &T) {
                 "status": "success",
                 "data": data,
             });
-            println!("{}", serde_json::to_string_pretty(&envelope).unwrap());
+            println!("{}", to_json(&envelope));
         }
         Format::Table => {} // caller handles table output
     }
@@ -149,7 +156,7 @@ fn print_error(format: Format, err: &CliError) {
         },
     });
     match format {
-        Format::Json => eprintln!("{}", serde_json::to_string_pretty(&envelope).unwrap()),
+        Format::Json => eprintln!("{}", to_json(&envelope)),
         Format::Table => {
             use owo_colors::OwoColorize;
             eprintln!("{} {}", "error:".red().bold(), err);
@@ -179,20 +186,25 @@ fn cmd_hello(format: Format, name: String, style: String) -> Result<(), CliError
         other => format!("Hello, {name}! ({other} style)"),
     };
 
-    let greeting = Greeting { name, style, message: message.clone() };
+    let greeting = Greeting { name, style, message };
 
     match format {
         Format::Json => print_success(format, &greeting),
         Format::Table => {
             use owo_colors::OwoColorize;
-            println!("{}", message.green());
+            println!("{}", greeting.message.green());
         }
     }
     Ok(())
 }
 
+// ── Agent info ──────────────────────────────────────────────────────────────
+// agent-info is always JSON — the whole point is machine readability.
+// It deliberately uses its own schema (not the envelope) because it IS
+// the schema definition. An agent calling agent-info is bootstrapping,
+// not executing a command that returns data.
+
 fn cmd_agent_info() {
-    // Always JSON — the whole point is machine readability.
     let info = serde_json::json!({
         "name": "greeter",
         "version": env!("CARGO_PKG_VERSION"),
@@ -213,10 +225,15 @@ fn cmd_agent_info() {
             "1": "Transient error (IO, network) — retry",
             "3": "Bad input — fix arguments",
         },
+        "envelope": {
+            "version": "1",
+            "success_shape": "{ version, status, data }",
+            "error_shape": "{ version, status, error: { code, message, suggestion } }",
+        },
         "auto_json_when_piped": true,
         "env_prefix": "GREETER_",
     });
-    println!("{}", serde_json::to_string_pretty(&info).unwrap());
+    println!("{}", to_json(&info));
 }
 
 // ── Skill installation ──────────────────────────────────────────────────────
@@ -242,9 +259,30 @@ struct SkillTarget {
     path: std::path::PathBuf,
 }
 
+#[derive(Serialize)]
+struct SkillResult {
+    platform: String,
+    path: String,
+    status: String,
+}
+
+#[derive(Serialize)]
+struct SkillStatus {
+    platform: String,
+    installed: bool,
+    current: bool,
+}
+
+fn home_dir() -> std::path::PathBuf {
+    // HOME on unix, USERPROFILE on Windows, fallback to current dir.
+    std::env::var("HOME")
+        .or_else(|_| std::env::var("USERPROFILE"))
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|_| std::path::PathBuf::from("."))
+}
+
 fn skill_targets() -> Vec<SkillTarget> {
-    let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
-    let h = std::path::PathBuf::from(&home);
+    let h = home_dir();
     vec![
         SkillTarget { name: "Claude Code", path: h.join(".claude/skills/greeter") },
         SkillTarget { name: "Codex CLI", path: h.join(".codex/skills/greeter") },
@@ -254,32 +292,30 @@ fn skill_targets() -> Vec<SkillTarget> {
 
 fn cmd_skill_install(format: Format) -> Result<(), CliError> {
     let targets = skill_targets();
-    let mut results: Vec<serde_json::Value> = Vec::new();
+    let mut results: Vec<SkillResult> = Vec::new();
 
     for target in &targets {
         let skill_path = target.path.join("SKILL.md");
 
         // Skip if already current
-        if skill_path.exists() {
-            if let Ok(existing) = std::fs::read_to_string(&skill_path) {
-                if existing == SKILL_CONTENT {
-                    results.push(serde_json::json!({
-                        "platform": target.name,
-                        "path": skill_path.display().to_string(),
-                        "status": "already_current",
-                    }));
-                    continue;
-                }
-            }
+        if skill_path.exists()
+            && std::fs::read_to_string(&skill_path).is_ok_and(|c| c == SKILL_CONTENT)
+        {
+            results.push(SkillResult {
+                platform: target.name.into(),
+                path: skill_path.display().to_string(),
+                status: "already_current".into(),
+            });
+            continue;
         }
 
         std::fs::create_dir_all(&target.path)?;
         std::fs::write(&skill_path, SKILL_CONTENT)?;
-        results.push(serde_json::json!({
-            "platform": target.name,
-            "path": skill_path.display().to_string(),
-            "status": "installed",
-        }));
+        results.push(SkillResult {
+            platform: target.name.into(),
+            path: skill_path.display().to_string(),
+            status: "installed".into(),
+        });
     }
 
     match format {
@@ -287,13 +323,12 @@ fn cmd_skill_install(format: Format) -> Result<(), CliError> {
         Format::Table => {
             use owo_colors::OwoColorize;
             for r in &results {
-                let status = r["status"].as_str().unwrap_or("?");
-                let marker = if status == "installed" { "+" } else { "=" };
+                let marker = if r.status == "installed" { "+" } else { "=" };
                 println!(
                     " {} {} → {}",
                     marker.green(),
-                    r["platform"].as_str().unwrap_or("?").bold(),
-                    r["path"].as_str().unwrap_or("?").dimmed(),
+                    r.platform.bold(),
+                    r.path.dimmed(),
                 );
             }
         }
@@ -303,23 +338,22 @@ fn cmd_skill_install(format: Format) -> Result<(), CliError> {
 
 fn cmd_skill_status(format: Format) -> Result<(), CliError> {
     let targets = skill_targets();
-    let mut results: Vec<serde_json::Value> = Vec::new();
+    let mut results: Vec<SkillStatus> = Vec::new();
 
     for target in &targets {
         let skill_path = target.path.join("SKILL.md");
         let (installed, current) = if skill_path.exists() {
             let current = std::fs::read_to_string(&skill_path)
-                .map(|c| c == SKILL_CONTENT)
-                .unwrap_or(false);
+                .is_ok_and(|c| c == SKILL_CONTENT);
             (true, current)
         } else {
             (false, false)
         };
-        results.push(serde_json::json!({
-            "platform": target.name,
-            "installed": installed,
-            "current": current,
-        }));
+        results.push(SkillStatus {
+            platform: target.name.into(),
+            installed,
+            current,
+        });
     }
 
     match format {
@@ -330,9 +364,9 @@ fn cmd_skill_status(format: Format) -> Result<(), CliError> {
             table.set_header(vec!["Platform", "Installed", "Current"]);
             for r in &results {
                 table.add_row(vec![
-                    r["platform"].as_str().unwrap_or("?").to_string(),
-                    if r["installed"].as_bool().unwrap_or(false) { "Yes".green().to_string() } else { "No".red().to_string() },
-                    if r["current"].as_bool().unwrap_or(false) { "Yes".green().to_string() } else { "No".dimmed().to_string() },
+                    r.platform.clone(),
+                    if r.installed { "Yes".green().to_string() } else { "No".red().to_string() },
+                    if r.current { "Yes".green().to_string() } else { "No".dimmed().to_string() },
                 ]);
             }
             println!("{table}");
@@ -343,7 +377,14 @@ fn cmd_skill_status(format: Format) -> Result<(), CliError> {
 
 // ── Self-update ─────────────────────────────────────────────────────────────
 
-fn cmd_update(check: bool) -> Result<(), CliError> {
+#[derive(Serialize)]
+struct UpdateResult {
+    current_version: String,
+    latest_version: String,
+    status: String,
+}
+
+fn cmd_update(format: Format, check: bool) -> Result<(), CliError> {
     let current = env!("CARGO_PKG_VERSION");
 
     // In a real CLI, replace owner/repo with your GitHub repo.
@@ -358,12 +399,23 @@ fn cmd_update(check: bool) -> Result<(), CliError> {
     if check {
         match status.get_latest_release() {
             Ok(latest) => {
-                let v = latest.version.trim_start_matches('v');
-                if v == current {
-                    println!("Up to date (v{current})");
-                } else {
-                    println!("Update available: v{current} → v{v}");
-                    println!("Run `greeter update` to install");
+                let v = latest.version.trim_start_matches('v').to_string();
+                let up_to_date = v == current;
+                let result = UpdateResult {
+                    current_version: current.into(),
+                    latest_version: v.clone(),
+                    status: if up_to_date { "up_to_date".into() } else { "update_available".into() },
+                };
+                match format {
+                    Format::Json => print_success(format, &result),
+                    Format::Table => {
+                        if up_to_date {
+                            println!("Up to date (v{current})");
+                        } else {
+                            println!("Update available: v{current} → v{v}");
+                            println!("Run `greeter update` to install");
+                        }
+                    }
                 }
             }
             Err(e) => return Err(CliError::Update(e.to_string())),
@@ -371,13 +423,23 @@ fn cmd_update(check: bool) -> Result<(), CliError> {
     } else {
         match status.update() {
             Ok(result) => {
-                let v = result.version().trim_start_matches('v');
-                if v == current {
-                    println!("Already up to date (v{current})");
-                } else {
-                    println!("Updated: v{current} → v{v}");
-                    // After binary update, skill needs re-deploying too:
-                    println!("Run `greeter skill install` to update agent skills");
+                let v = result.version().trim_start_matches('v').to_string();
+                let up_to_date = v == current;
+                let update_result = UpdateResult {
+                    current_version: current.into(),
+                    latest_version: v.clone(),
+                    status: if up_to_date { "up_to_date".into() } else { "updated".into() },
+                };
+                match format {
+                    Format::Json => print_success(format, &update_result),
+                    Format::Table => {
+                        if up_to_date {
+                            println!("Already up to date (v{current})");
+                        } else {
+                            println!("Updated: v{current} → v{v}");
+                            println!("Run `greeter skill install` to update agent skills");
+                        }
+                    }
                 }
             }
             Err(e) => return Err(CliError::Update(e.to_string())),
@@ -389,7 +451,30 @@ fn cmd_update(check: bool) -> Result<(), CliError> {
 // ── Entry point ─────────────────────────────────────────────────────────────
 
 fn main() {
-    let cli = Cli::parse();
+    // Use try_parse so clap errors go through the JSON envelope instead of
+    // printing human-only text that breaks agent pipelines.
+    let cli = match Cli::try_parse() {
+        Ok(cli) => cli,
+        Err(e) => {
+            let format = Format::detect(false);
+            match format {
+                Format::Json => {
+                    let envelope = serde_json::json!({
+                        "version": "1",
+                        "status": "error",
+                        "error": {
+                            "code": "invalid_input",
+                            "message": e.to_string(),
+                            "suggestion": "Run with --help for usage",
+                        },
+                    });
+                    eprintln!("{}", to_json(&envelope));
+                    std::process::exit(3);
+                }
+                Format::Table => e.exit(),
+            }
+        }
+    };
     let format = Format::detect(cli.json);
 
     let result = match cli.command {
@@ -399,7 +484,7 @@ fn main() {
             SkillAction::Install => cmd_skill_install(format),
             SkillAction::Status => cmd_skill_status(format),
         },
-        Commands::Update { check } => cmd_update(check),
+        Commands::Update { check } => cmd_update(format, check),
     };
 
     if let Err(e) = result {

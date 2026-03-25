@@ -22,7 +22,7 @@ An MCP server is a connection. It tells the agent "there's a service over there,
 
 A CLI is the tool. It sits on the machine, does one job, and explains itself when asked. An agent that has `search` on its PATH can search. An agent that has `labparse` can parse lab results. No intermediary, no server process, no protocol layer. The agent shells out, gets structured JSON back, and moves on.
 
-This matters more than the efficiency argument, but the efficiency argument is brutal too. Scalekit benchmarked 75 tasks: the simplest cost **1,365 tokens via CLI** and **44,026 via MCP** -- a 32x overhead. Each MCP tool definition burns 550-1,400 tokens just to describe itself. A typical setup dumps 55,000 tokens into the context window before any real work starts. Speakeasy found that at 107 tools, model accuracy collapsed to zero. GitHub Copilot cut from 40 tools to 13 and got better results.
+This matters more than the efficiency argument, but the efficiency argument is brutal too. Scalekit benchmarked 75 tasks: the simplest cost **1,365 tokens via CLI** and **44,026 via MCP** -- a 32x overhead. Each MCP tool definition burns 550-1,400 tokens just to describe itself. A typical setup dumps 55,000 tokens into the context window before any real work starts. Speakeasy found that at 107 tools, models struggled to select the right one and started hallucinating tool names that didn't exist. GitHub Copilot [cut from 40 tools to 13](https://github.blog/ai-and-ml/github-copilot/how-were-making-github-copilot-smarter-with-fewer-tools/) and got better results.
 
 But the deeper issue isn't tokens. It's that agents already know how to use CLIs. LLMs trained on millions of shell examples from Stack Overflow, GitHub, and man pages have the grammar of `tool subcommand --flag value` baked into their weights. Eugene Petrenko at JetBrains documented agents autonomously discovering and using the `gh` CLI -- handling auth, reading PRs, managing issues -- without being told it existed.
 
@@ -198,7 +198,7 @@ These CLIs use these patterns in production:
 
 - [MCP vs CLI: Benchmarking AI Agent Cost & Reliability](https://www.scalekit.com/blog/mcp-vs-cli-use) -- Scalekit
 - [Your MCP Server Is Eating Your Context Window](https://www.apideck.com/blog/mcp-server-eating-context-window-cli-alternative) -- Apideck
-- [CLI Is the New API and MCP](https://jonnyzzz.com/blog/2026/02/20/cli-tools-for-ai-agents/) -- Eugene Petrenko, JetBrains
+- [CLI Is the New API and MCP](https://jonnyzzz.com/blog/2026/02/20/cli-tools-for-ai-agents/) -- Eugene Petrenko
 - [Reducing MCP Token Usage by 100x](https://www.speakeasy.com/blog/how-we-reduced-token-usage-by-100x-dynamic-toolsets-v2) -- Speakeasy
 
 ---
