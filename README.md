@@ -38,7 +38,7 @@ A CLI becomes agent-friendly with five additions:
 
 **`agent-info` command.** A JSON manifest of everything the tool can do -- commands, flags, exit codes, environment variables. The agent calls it once and works from memory. This replaces documentation. The binary describes itself.
 
-**Structured output.** JSON envelope on stdout when piped, coloured table when in a terminal. Auto-detected via `std::io::IsTerminal`. Errors include a `suggestion` field telling the agent exactly how to recover.
+**Structured output.** JSON envelope on stdout when piped, coloured table when in a terminal. Auto-detected via `std::io::IsTerminal`. Errors go to stderr with the same JSON envelope -- an agent should check both the exit code and stderr, not just pipe stdout through `jq`. Errors include a `suggestion` field telling the agent exactly how to recover.
 
 **Semantic exit codes.** `0` success, `1` transient (retry), `2` config (fix setup), `3` bad input (fix args), `4` rate limited (wait). The agent reads the code and knows its next move without parsing the error message.
 
