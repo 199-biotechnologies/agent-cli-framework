@@ -16,21 +16,17 @@
 
 ## Why CLIs
 
-Something odd happened over the past year.
+Agents need tools. Not connections to tools. Not descriptions of tools. Actual tools they can pick up and use.
 
-MCP servers were supposed to be the way AI agents talk to the world. Structured schemas, typed parameters, proper JSON-RPC. The protocol looked right on paper. Then people started using it at scale.
+An MCP server is a connection. It tells the agent "there's a service over there, here's its schema, here's how to call it." A skill file is an instruction manual. It tells the agent "here's how to do the thing." But neither of them is the thing itself. The agent reads about capabilities without having them. It's the difference between handing someone a hammer and handing them a pamphlet about hammers.
 
-Scalekit ran 75 benchmarked tasks comparing MCP against plain CLI calls. The simplest task -- fetching a repo's language and licence -- cost **1,365 tokens via CLI** and **44,026 via MCP**. That's a 32x overhead. Across all tasks, MCP used 4-32x more tokens, cost 17x more at scale, and failed 28% of the time due to server timeouts. CLI succeeded every time.
+A CLI is the tool. It sits on the machine, does one job, and explains itself when asked. An agent that has `search` on its PATH can search. An agent that has `labparse` can parse lab results. No intermediary, no server process, no protocol layer. The agent shells out, gets structured JSON back, and moves on.
 
-The reason is structural. Each MCP tool definition burns 550-1,400 tokens of context just to describe itself. A typical MCP setup dumps 55,000 tokens into the context window before the agent does anything useful. One team reported three MCP servers consuming 143,000 of 200,000 available tokens -- 72% of the agent's working memory gone on tool descriptions alone.
+This matters more than the efficiency argument, but the efficiency argument is brutal too. Scalekit benchmarked 75 tasks: the simplest cost **1,365 tokens via CLI** and **44,026 via MCP** -- a 32x overhead. Each MCP tool definition burns 550-1,400 tokens just to describe itself. A typical setup dumps 55,000 tokens into the context window before any real work starts. Speakeasy found that at 107 tools, model accuracy collapsed to zero. GitHub Copilot cut from 40 tools to 13 and got better results.
 
-Then there's the confusion problem. Speakeasy tested tool counts against model accuracy. At 20 tools, large models scored 19 out of 20. At 107 tools, both large and small models failed completely. GitHub Copilot cut from 40 tools to 13 and saw measurable improvements. Block rebuilt its Linear MCP server three times, going from 30+ tools down to 2.
+But the deeper issue isn't tokens. It's that agents already know how to use CLIs. LLMs trained on millions of shell examples from Stack Overflow, GitHub, and man pages have the grammar of `tool subcommand --flag value` baked into their weights. Eugene Petrenko at JetBrains documented agents autonomously discovering and using the `gh` CLI -- handling auth, reading PRs, managing issues -- without being told it existed.
 
-Meanwhile, agents were already using CLIs without being asked. Eugene Petrenko at JetBrains documented how AI agents autonomously discovered and used the `gh` CLI -- handling authentication, reading PR comments, managing issues -- because LLMs have been trained on millions of shell examples. The grammar of `tool subcommand --flag value` is already in the weights.
-
-The pattern that emerged: a single Rust binary with structured JSON output, semantic exit codes, and a built-in capability manifest (`agent-info`) gives an agent everything it needs. No server process to manage. No schema dump eating the context window. No protocol layer between the agent and the work.
-
-A CLI is ~80 tokens of agent prompt plus a 50-200 token `--help` call when needed. An MCP server is 55,000 tokens upfront whether you need them or not.
+Skills and MCP servers have their place. But the foundation is the tool itself. A well-built CLI with structured output and a built-in capability manifest gives an agent something no amount of documentation can: the ability to just do the thing.
 
 This repo shows how to build that kind of CLI.
 
