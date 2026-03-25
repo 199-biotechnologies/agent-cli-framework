@@ -2,7 +2,7 @@
 
 <p align="center">
   <strong>Build CLIs that agents use instinctively. No MCP server. No skill files. Just a binary.</strong><br>
-  <em>Patterns extracted from production tools at <a href="https://github.com/199-biotechnologies">199 Biotechnologies</a>.</em>
+  <em>Patterns extracted from production tools at <a href="https://github.com/199-biotechnologies">Paperfoot AI (SG) Pte. Ltd.</a></em>
 </p>
 
 <p align="center">
@@ -150,10 +150,7 @@ These CLIs use these patterns in production:
 | [search-cli](https://github.com/199-biotechnologies/search-cli) | 11 search providers, 14 modes, one binary | `cargo install agent-search` |
 | [autoresearch](https://github.com/199-biotechnologies/autoresearch-cli) | Autonomous experiment loops for any metric | `cargo install autoresearch` |
 | [xmaster](https://github.com/199-biotechnologies/xmaster) | X/Twitter CLI with dual backends | `cargo install xmaster` |
-| [labparse](https://github.com/199-biotechnologies/labparse-cli) | Lab results to structured biomarker JSON | `brew install labparse` |
-| [labassess](https://github.com/199-biotechnologies/labassess-cli) | Score biomarkers against longevity-optimal ranges | `brew install labassess` |
-
-All available via `brew tap 199-biotechnologies/tap`.
+| [email-cli](https://github.com/199-biotechnologies/email-cli) | Agent-friendly email via Resend API | `cargo install email-cli` |
 
 ---
 
@@ -168,4 +165,4 @@ All available via `brew tap 199-biotechnologies/tap`.
 
 ## Licence
 
-MIT -- Copyright (c) 2025-2026 Boris Djordjevic, [199 Biotechnologies](https://199.bio)
+MIT -- Copyright (c) 2025-2026 Boris Djordjevic, Paperfoot AI (SG) Pte. Ltd.
