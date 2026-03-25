@@ -1,2 +1,6 @@
 target/
 .claude/
+.agents/
+.cursor/
+.github/
+.windsurf/
