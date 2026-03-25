@@ -7,7 +7,7 @@
 
 <p align="center">
   <a href="#why-clis">Why CLIs</a> &middot;
-  <a href="#four-patterns">Four Patterns</a> &middot;
+  <a href="#five-patterns">Five Patterns</a> &middot;
   <a href="#the-example">The Example</a> &middot;
   <a href="#production-clis">Production CLIs</a>
 </p>
@@ -32,9 +32,9 @@ This repo shows how to build that kind of CLI.
 
 ---
 
-## Four Patterns
+## Five Patterns
 
-A CLI becomes agent-friendly with four additions:
+A CLI becomes agent-friendly with five additions:
 
 **`agent-info` command.** A JSON manifest of everything the tool can do -- commands, flags, exit codes, environment variables. The agent calls it once and works from memory. This replaces documentation. The binary describes itself.
 
@@ -44,11 +44,35 @@ A CLI becomes agent-friendly with four additions:
 
 **Skill self-install.** The binary carries a minimal SKILL.md compiled in via `include_str!`. One command writes it to `~/.claude/skills/`, `~/.codex/skills/`, `~/.gemini/skills/`. The skill is just a signpost -- a few lines saying "this tool exists, run `agent-info` for the rest." Binary update = skill update. No drift.
 
+**Distribution and self-update.** Three install paths, one update mechanism. The user gets the binary however they prefer. The binary updates itself.
+
+```
+Install paths (pick any):
+
+  brew tap 199-biotechnologies/tap && brew install your-cli    # Homebrew
+  cargo install your-cli                                        # crates.io
+  curl -fsSL https://your-cli.dev/install.sh | sh              # shell script
+
+Self-update (built into the binary):
+
+  your-cli update --check       # check for new version
+  your-cli update               # pull latest from GitHub Releases
+  your-cli skill install        # re-deploy updated skill to all agents
+```
+
+The Homebrew tap is a GitHub repo (`your-org/homebrew-tap`) with a formula per CLI. When you cut a release, CI builds binaries for `x86_64-apple-darwin`, `aarch64-apple-darwin`, `x86_64-unknown-linux-gnu`, and `aarch64-unknown-linux-gnu`, uploads them as release assets, and updates the tap formula with the new version and sha256.
+
+crates.io is `cargo publish`. The binary lands on every machine with a Rust toolchain.
+
+The shell installer is a `curl | sh` one-liner that detects the platform, downloads the right binary from GitHub Releases, and drops it into `/usr/local/bin`.
+
+Self-update uses the [`self_update`](https://crates.io/crates/self_update) crate. It checks GitHub Releases for a newer version, downloads the matching binary, and replaces itself. After update, `your-cli skill install` re-deploys the bundled skill -- which now contains the latest version's instructions. One command updates the tool. One command updates every agent's knowledge of it.
+
 ---
 
 ## The Example
 
-A working Rust CLI demonstrating all four patterns in one file:
+A working Rust CLI demonstrating all five patterns in one file:
 
 ```
 example/
