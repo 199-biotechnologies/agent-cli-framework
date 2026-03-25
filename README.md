@@ -1,83 +1,85 @@
 <h1 align="center">agent-cli-framework</h1>
 
 <p align="center">
-  <strong>A CLI that describes itself is better than a CLI with documentation.</strong><br>
-  <em>Patterns for building Rust CLIs that AI agents use instinctively.</em>
+  <strong>Build CLIs that agents use instinctively. No MCP server. No skill files. Just a binary.</strong><br>
+  <em>Patterns extracted from production tools at <a href="https://github.com/199-biotechnologies">199 Biotechnologies</a>.</em>
 </p>
 
 <p align="center">
-  <a href="#the-idea">The Idea</a> &middot;
-  <a href="#the-patterns">The Patterns</a> &middot;
+  <a href="#why-clis">Why CLIs</a> &middot;
+  <a href="#four-patterns">Four Patterns</a> &middot;
   <a href="#the-example">The Example</a> &middot;
   <a href="#production-clis">Production CLIs</a>
 </p>
 
 ---
 
-## The Idea
+## Why CLIs
 
-The best documentation for an AI agent is no documentation.
+Something odd happened over the past year.
 
-A CLI should describe itself well enough that an agent can pick it up and use it without reading a README, a wiki, or a skill file. The binary carries its own capability manifest (`agent-info`), its own error recovery hints (`suggestion` fields), and its own output contract (JSON envelope). An agent calls `tool agent-info`, gets back structured JSON with every command, flag, and exit code, and starts working.
+MCP servers were supposed to be the way AI agents talk to the world. Structured schemas, typed parameters, proper JSON-RPC. The protocol looked right on paper. Then people started using it at scale.
 
-The skill file -- the thing that agent platforms like Claude Code, Codex, and Gemini use to discover tools -- should be almost empty. A few lines: "this tool exists, here's what it does, run `agent-info` for the rest." The CLI installs that tiny pointer into every agent platform with a single command. When the binary updates, the pointer updates with it, because it's compiled into the binary.
+Scalekit ran 75 benchmarked tasks comparing MCP against plain CLI calls. The simplest task -- fetching a repo's language and licence -- cost **1,365 tokens via CLI** and **44,026 via MCP**. That's a 32x overhead. Across all tasks, MCP used 4-32x more tokens, cost 17x more at scale, and failed 28% of the time due to server timeouts. CLI succeeded every time.
 
-No separate documentation to maintain. No skill that drifts from the tool it describes. The CLI is the source of truth.
+The reason is structural. Each MCP tool definition burns 550-1,400 tokens of context just to describe itself. A typical MCP setup dumps 55,000 tokens into the context window before the agent does anything useful. One team reported three MCP servers consuming 143,000 of 200,000 available tokens -- 72% of the agent's working memory gone on tool descriptions alone.
 
-This repo has one working Rust example that you can build and run. It shows every pattern. Extracted from production CLIs at [199 Biotechnologies](https://github.com/199-biotechnologies).
+Then there's the confusion problem. Speakeasy tested tool counts against model accuracy. At 20 tools, large models scored 19 out of 20. At 107 tools, both large and small models failed completely. GitHub Copilot cut from 40 tools to 13 and saw measurable improvements. Block rebuilt its Linear MCP server three times, going from 30+ tools down to 2.
+
+Meanwhile, agents were already using CLIs without being asked. Eugene Petrenko at JetBrains documented how AI agents autonomously discovered and used the `gh` CLI -- handling authentication, reading PR comments, managing issues -- because LLMs have been trained on millions of shell examples. The grammar of `tool subcommand --flag value` is already in the weights.
+
+The pattern that emerged: a single Rust binary with structured JSON output, semantic exit codes, and a built-in capability manifest (`agent-info`) gives an agent everything it needs. No server process to manage. No schema dump eating the context window. No protocol layer between the agent and the work.
+
+A CLI is ~80 tokens of agent prompt plus a 50-200 token `--help` call when needed. An MCP server is 55,000 tokens upfront whether you need them or not.
+
+This repo shows how to build that kind of CLI.
 
 ---
 
-## The Patterns
+## Four Patterns
 
-**Four things make a CLI agent-friendly:**
+A CLI becomes agent-friendly with four additions:
 
-**1. `agent-info` command.** Returns a JSON manifest of everything the tool can do. Commands, flags, exit codes, environment variables. An agent calls this once and operates the tool from memory.
+**`agent-info` command.** A JSON manifest of everything the tool can do -- commands, flags, exit codes, environment variables. The agent calls it once and works from memory. This replaces documentation. The binary describes itself.
 
-**2. Structured output.** JSON envelope on stdout when piped, coloured table when in a terminal. Auto-detected via `std::io::IsTerminal`. Errors include a `suggestion` field that tells the agent exactly what to do next.
+**Structured output.** JSON envelope on stdout when piped, coloured table when in a terminal. Auto-detected via `std::io::IsTerminal`. Errors include a `suggestion` field telling the agent exactly how to recover.
 
-**3. Semantic exit codes.** `0` success, `1` transient (retry), `2` config (fix setup), `3` bad input (fix args), `4` rate limited (wait). The agent reads the code and knows its next move without parsing the error message.
+**Semantic exit codes.** `0` success, `1` transient (retry), `2` config (fix setup), `3` bad input (fix args), `4` rate limited (wait). The agent reads the code and knows its next move without parsing the error message.
 
-**4. Skill self-install.** The binary carries a minimal SKILL.md compiled in via `include_str!`. One command writes it to `~/.claude/skills/`, `~/.codex/skills/`, `~/.gemini/skills/`, and anywhere else agents look. Binary update = skill update. No drift.
-
-That's it. No framework to install, no traits to implement. Just conventions in a single-file Rust CLI.
+**Skill self-install.** The binary carries a minimal SKILL.md compiled in via `include_str!`. One command writes it to `~/.claude/skills/`, `~/.codex/skills/`, `~/.gemini/skills/`. The skill is just a signpost -- a few lines saying "this tool exists, run `agent-info` for the rest." Binary update = skill update. No drift.
 
 ---
 
 ## The Example
 
-A working Rust CLI that demonstrates all four patterns in ~300 lines:
+A working Rust CLI demonstrating all four patterns in one file:
 
 ```
 example/
   Cargo.toml
-  src/main.rs
+  src/main.rs    (~280 lines)
 ```
 
-Build and try it:
+Build and run:
 
 ```bash
-cd example
-cargo build --release
+cd example && cargo build --release
 
-# Human mode (coloured output in terminal)
+# Human at a terminal -- coloured output
 ./target/release/greeter hello Boris --style pirate
 
-# Agent mode (pipe triggers JSON automatically)
+# Agent piping -- auto-switches to JSON
 ./target/release/greeter hello Boris | jq
 
-# Capability discovery
+# Capability discovery -- the whole point
 ./target/release/greeter agent-info
 
-# Error with semantic exit code and suggestion
+# Error with semantic exit code
 ./target/release/greeter hello ""
-echo $?  # exits 3 (bad input)
+echo $?  # 3 (bad input)
 
 # Install skill to all agent platforms
 ./target/release/greeter skill install
-
-# Check what's installed where
-./target/release/greeter skill status
 
 # Self-update from GitHub Releases
 ./target/release/greeter update --check
@@ -107,7 +109,7 @@ echo $?  # exits 3 (bad input)
 
 ### What the skill file looks like
 
-The entire skill, installed to every agent platform, is this:
+The entire skill, installed to every agent platform:
 
 ```yaml
 ---
@@ -123,7 +125,7 @@ A demo CLI. Run `greeter agent-info` for the machine-readable capability
 manifest. Run `greeter hello <name> --style pirate` to use it.
 ```
 
-That's it. The skill is a signpost. The binary is the manual.
+The skill is a signpost. The binary is the manual.
 
 ### What errors look like
 
@@ -139,7 +141,7 @@ That's it. The skill is a signpost. The binary is the manual.
 }
 ```
 
-The agent reads `code`, checks the exit code (3 = bad input), follows the `suggestion`. No guessing.
+Exit code 3. The agent reads `code`, reads `suggestion`, acts.
 
 ---
 
@@ -159,6 +161,15 @@ All available via `brew tap 199-biotechnologies/tap`.
 
 ---
 
-## License
+## Further Reading
+
+- [MCP vs CLI: Benchmarking AI Agent Cost & Reliability](https://www.scalekit.com/blog/mcp-vs-cli-use) -- Scalekit
+- [Your MCP Server Is Eating Your Context Window](https://www.apideck.com/blog/mcp-server-eating-context-window-cli-alternative) -- Apideck
+- [CLI Is the New API and MCP](https://jonnyzzz.com/blog/2026/02/20/cli-tools-for-ai-agents/) -- Eugene Petrenko, JetBrains
+- [Reducing MCP Token Usage by 100x](https://www.speakeasy.com/blog/how-we-reduced-token-usage-by-100x-dynamic-toolsets-v2) -- Speakeasy
+
+---
+
+## Licence
 
 MIT -- Copyright (c) 2025-2026 Boris Djordjevic, [199 Biotechnologies](https://199.bio)
