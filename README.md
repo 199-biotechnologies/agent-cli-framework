@@ -141,6 +141,22 @@ Exit code 3. The agent reads `code`, reads `suggestion`, acts.
 
 ---
 
+## Mistakes We Made
+
+These came from applying the patterns above to production CLIs and watching agents actually use them. Every one of these shipped before we caught it.
+
+**Wrong suggestions.** Our search CLI told agents to set `SEARCH_BRAVE_KEY` when the actual env var was `SEARCH_KEYS_BRAVE`. The agent followed the suggestion exactly, set the wrong variable, and reported auth still broken. Suggestions are not hints. They are instructions. Test them.
+
+**JSON only on the main command.** The primary `search` command returned proper JSON envelopes. But `config show`, `update --check`, and cache-miss paths printed raw text. An agent piping stdout into a JSON parser got a crash instead of data. Every subcommand, every code path, every error -- if it writes to stdout, it must respect the output format.
+
+**Success that was failure.** All eleven providers errored out (rate limits, timeouts, auth). The response: `{"status": "success", "results": []}`. The agent saw success, concluded no results matched the query, and moved on. The actual problem was that nothing worked. We added `partial_success` as a third status for when some providers fail but others return results, and `all_failed` for total failure.
+
+**Retry that never fired.** The retry wrapper caught `Http` transport errors. But providers converted HTTP 500/503 into `Api { message }` errors during response parsing. The retry logic never saw a retryable error. Match on HTTP status codes before you parse the body, not after.
+
+**Dead features in agent-info.** The capability manifest advertised `deep` and `academic` search modes. The functions existed in the code but were never wired into the dispatch path. An agent that called `search --mode deep` got an "unknown mode" error despite agent-info promising it worked. If agent-info says the tool can do something, it must actually do it.
+
+---
+
 ## Production CLIs
 
 These CLIs use these patterns in production:
