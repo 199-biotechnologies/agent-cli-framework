@@ -1,97 +1,115 @@
-<h1 align="center">agent-cli-framework</h1>
+<div align="center">
 
-<p align="center">
-  <strong>Build CLIs that agents use instinctively. No MCP server. No skill files. Just a binary.</strong><br>
-  <em>Patterns extracted from production tools at <a href="https://github.com/199-biotechnologies">Paperfoot AI (SG) Pte. Ltd.</a></em>
-</p>
+# Agent CLI Framework
 
-<p align="center">
-  <a href="#why-clis">Why CLIs</a> &middot;
-  <a href="#five-patterns">Five Patterns</a> &middot;
-  <a href="#the-example">The Example</a> &middot;
-  <a href="#production-clis">Production CLIs</a>
-</p>
+**Build Rust CLIs that AI agents can discover, call, and learn from.**
+
+<br />
+
+[![Star this repo](https://img.shields.io/github/stars/199-biotechnologies/agent-cli-framework?style=for-the-badge&logo=github&label=%E2%AD%90%20Star%20this%20repo&color=yellow)](https://github.com/199-biotechnologies/agent-cli-framework/stargazers)
+&nbsp;&nbsp;
+[![Follow @longevityboris](https://img.shields.io/badge/Follow_%40longevityboris-000000?style=for-the-badge&logo=x&logoColor=white)](https://x.com/longevityboris)
+
+<br />
+
+[![Rust](https://img.shields.io/badge/Rust-000000?style=for-the-badge&logo=rust&logoColor=white)](https://www.rust-lang.org/)
+[![MIT License](https://img.shields.io/badge/License-MIT-blue?style=for-the-badge)](LICENSE)
+[![PRs Welcome](https://img.shields.io/badge/PRs-Welcome-brightgreen?style=for-the-badge)](CONTRIBUTING.md)
 
 ---
 
-## Why CLIs
+Five patterns that turn any Rust CLI into a tool AI agents can pick up and use without documentation, MCP servers, or skill files. The binary describes itself, returns structured output, and uses semantic exit codes. Your CLI becomes the tool, the documentation, and the API -- all in one binary.
+
+[Why This Exists](#why-this-exists) | [Before vs After](#before-vs-after) | [Install](#install) | [How It Works](#how-it-works) | [Features](#features) | [Contributing](#contributing)
+
+</div>
+
+## Why This Exists
 
 Agents need tools. Not connections to tools. Not descriptions of tools. Actual tools they can pick up and use.
 
-An MCP server is a connection. It tells the agent "there's a service over there, here's its schema, here's how to call it." A skill file is an instruction manual. It tells the agent "here's how to do the thing." But neither of them is the thing itself. The agent reads about capabilities without having them. It's the difference between handing someone a hammer and handing them a pamphlet about hammers.
+An MCP server is a connection -- it tells the agent "there's a service over there, here's its schema, here's how to call it." A skill file is an instruction manual. Neither is the tool itself. The agent reads about capabilities without having them. It's the difference between handing someone a hammer and handing them a pamphlet about hammers.
 
 A CLI is the tool. It sits on the machine, does one job, and explains itself when asked. An agent that has `search` on its PATH can search. An agent that has `labparse` can parse lab results. No intermediary, no server process, no protocol layer. The agent shells out, gets structured JSON back, and moves on.
 
-This matters more than the efficiency argument, but the efficiency argument is brutal too. Scalekit benchmarked 75 tasks: the simplest cost **1,365 tokens via CLI** and **44,026 via MCP** -- a 32x overhead. Each MCP tool definition burns 550-1,400 tokens just to describe itself. A typical setup dumps 55,000 tokens into the context window before any real work starts. Speakeasy found that at 107 tools, models struggled to select the right one and started hallucinating tool names that didn't exist. GitHub Copilot [cut from 40 tools to 13](https://github.blog/ai-and-ml/github-copilot/how-were-making-github-copilot-smarter-with-fewer-tools/) and got better results.
+### The numbers back this up
 
-But the deeper issue isn't tokens. It's that agents already know how to use CLIs. LLMs trained on millions of shell examples from Stack Overflow, GitHub, and man pages have the grammar of `tool subcommand --flag value` baked into their weights. Eugene Petrenko at JetBrains documented agents autonomously discovering and using the `gh` CLI -- handling auth, reading PRs, managing issues -- without being told it existed.
+Scalekit benchmarked 75 tasks: the simplest cost **1,365 tokens via CLI** and **44,026 via MCP** -- a 32x overhead. Each MCP tool definition burns 550-1,400 tokens just to describe itself. A typical setup dumps 55,000 tokens into the context window before any real work starts.
 
-Skills and MCP servers have their place. But the foundation is the tool itself. A well-built CLI with structured output and a built-in capability manifest gives an agent something no amount of documentation can: the ability to just do the thing.
+Speakeasy found that at 107 tools, models struggled to select the right one and started hallucinating tool names that didn't exist. GitHub Copilot [cut from 40 tools to 13](https://github.blog/ai-and-ml/github-copilot/how-were-making-github-copilot-smarter-with-fewer-tools/) and got better results.
 
-This repo shows how to build that kind of CLI.
+LLMs already know how to use CLIs. They were trained on millions of shell examples from Stack Overflow, GitHub, and man pages. The grammar of `tool subcommand --flag value` is baked into their weights. Eugene Petrenko at JetBrains documented agents autonomously discovering and using the `gh` CLI -- handling auth, reading PRs, managing issues -- without being told it existed.
 
----
+This repo gives you the architecture to build CLIs that work that way.
 
-## Five Patterns
+## Before vs After
 
-A CLI becomes agent-friendly with five additions:
-
-**`agent-info` command.** A JSON manifest of everything the tool can do -- commands, flags, exit codes, environment variables. The agent calls it once and works from memory. This replaces documentation. The binary describes itself.
-
-**Structured output.** JSON envelope on stdout when piped, coloured table when in a terminal. Auto-detected via `std::io::IsTerminal`. Errors go to stderr with the same JSON envelope -- an agent should check both the exit code and stderr, not just pipe stdout through `jq`. Errors include a `suggestion` field telling the agent exactly how to recover.
-
-**Semantic exit codes.** `0` success, `1` transient (retry), `2` config (fix setup), `3` bad input (fix args), `4` rate limited (wait). The agent reads the code and knows its next move without parsing the error message.
-
-**Skill self-install.** The binary carries a minimal SKILL.md compiled in via `include_str!`. One command writes it to `~/.claude/skills/`, `~/.codex/skills/`, `~/.gemini/skills/`. The skill is just a signpost -- a few lines saying "this tool exists, run `agent-info` for the rest." Binary update = skill update. No drift.
-
-**Distribution and self-update.** Three install paths, one update mechanism. The user gets the binary however they prefer. The binary updates itself.
+<table>
+<tr>
+<th width="50%">Regular CLI</th>
+<th width="50%">Agent-Friendly CLI</th>
+</tr>
+<tr>
+<td>
 
 ```
-Install paths (pick any):
+$ mytool search "rust cli"
+Found 3 results:
+  1. Clap framework
+  2. Structopt (deprecated)
+  3. Argh by Google
 
-  brew tap 199-biotechnologies/tap && brew install your-cli    # Homebrew
-  cargo install your-cli                                        # crates.io
-  curl -fsSL https://your-cli.dev/install.sh | sh              # shell script
-
-Self-update (built into the binary):
-
-  your-cli update --check       # check for new version
-  your-cli update               # pull latest from GitHub Releases
-  your-cli skill install        # re-deploy updated skill to all agents
+$ echo $?
+0
 ```
 
-The Homebrew tap is a GitHub repo (`your-org/homebrew-tap`) with a formula per CLI. When you cut a release, CI builds binaries for `x86_64-apple-darwin`, `aarch64-apple-darwin`, `x86_64-unknown-linux-gnu`, and `aarch64-unknown-linux-gnu`, uploads them as release assets, and updates the tap formula with the new version and sha256.
+Human-readable output. Agent has to parse free text. No way to discover capabilities programmatically. Exit code 0 means... it ran?
 
-crates.io is `cargo publish`. The binary lands on every machine with a Rust toolchain.
+</td>
+<td>
 
-The shell installer is a `curl | sh` one-liner that detects the platform, downloads the right binary from GitHub Releases, and drops it into `/usr/local/bin`.
-
-Self-update uses the [`self_update`](https://crates.io/crates/self_update) crate. It checks GitHub Releases for a newer version, downloads the matching binary, and replaces itself. After update, `your-cli skill install` re-deploys the bundled skill -- which now contains the latest version's instructions. One command updates the tool. One command updates every agent's knowledge of it.
-
----
-
-## The Example
-
-A working Rust CLI demonstrating all five patterns in one file:
-
+```json
+$ mytool search "rust cli" | jq
+{
+  "version": "1",
+  "status": "success",
+  "data": {
+    "results": [
+      {"title": "Clap framework", "url": "..."},
+      {"title": "Structopt", "url": "..."},
+      {"title": "Argh", "url": "..."}
+    ],
+    "count": 3
+  }
+}
 ```
-example/
-  Cargo.toml
-  src/main.rs    (~280 lines)
-```
 
-Build and run:
+Structured JSON when piped. Coloured table in a terminal. `agent-info` tells the agent everything it can do. Exit code 3 means "fix your arguments."
+
+</td>
+</tr>
+</table>
+
+## Install
+
+Clone the repo and build the example:
 
 ```bash
-cd example && cargo build --release
+git clone https://github.com/199-biotechnologies/agent-cli-framework.git
+cd agent-cli-framework/example
+cargo build --release
+```
 
+Run it:
+
+```bash
 # Human at a terminal -- coloured output
 ./target/release/greeter hello Boris --style pirate
 
 # Agent piping -- auto-switches to JSON
 ./target/release/greeter hello Boris | jq
 
-# Capability discovery -- the whole point
+# Capability discovery
 ./target/release/greeter agent-info
 
 # Error with semantic exit code
@@ -100,12 +118,41 @@ echo $?  # 3 (bad input)
 
 # Install skill to all agent platforms
 ./target/release/greeter skill install
-
-# Self-update from GitHub Releases
-./target/release/greeter update --check
 ```
 
-### What `agent-info` returns
+## How It Works
+
+```
+                    ┌─────────────────────────────────────┐
+                    │           Your Rust CLI              │
+                    │                                      │
+                    │  ┌──────────┐  ┌──────────────────┐  │
+  Agent calls       │  │  clap    │  │  Output Format   │  │
+  `tool agent-info` │  │  Parser  │  │  Detection       │  │
+        │           │  └────┬─────┘  │  (TTY → table)   │  │
+        ▼           │       │        │  (Pipe → JSON)   │  │
+  ┌───────────┐     │       ▼        └──────────────────┘  │
+  │ Capability│     │  ┌─────────┐   ┌──────────────────┐  │
+  │ Manifest  │◄────┤  │ Command │   │  JSON Envelope   │  │
+  │ (JSON)    │     │  │ Router  │──▶│  { version,      │  │
+  └───────────┘     │  └─────────┘   │    status, data } │  │
+                    │       │        └──────────────────┘  │
+  Agent reads       │       ▼                              │
+  exit code ────────┤  ┌─────────┐   ┌──────────────────┐  │
+  0: success        │  │ Semantic│   │  Skill            │  │
+  1: retry          │  │ Exit    │   │  Self-Install     │  │
+  3: fix args       │  │ Codes   │   │  (~/.claude/,     │  │
+                    │  └─────────┘   │   ~/.codex/,      │  │
+                    │                │   ~/.gemini/)      │  │
+                    │                └──────────────────┘  │
+                    └─────────────────────────────────────┘
+```
+
+## Features
+
+### 1. `agent-info` -- Capability Discovery
+
+The binary describes itself. One command returns a JSON manifest of everything the tool can do: commands, flags, exit codes, environment variables.
 
 ```json
 {
@@ -127,27 +174,11 @@ echo $?  # 3 (bad input)
 }
 ```
 
-### What the skill file looks like
+The agent calls it once and works from memory. This replaces documentation.
 
-The entire skill, installed to every agent platform:
+### 2. Structured Output -- JSON Envelope
 
-```yaml
----
-name: greeter
-description: >
-  Greet people in different styles. Run `greeter agent-info` for full
-  capabilities, flags, and exit codes.
----
-
-## greeter
-
-A demo CLI. Run `greeter agent-info` for the machine-readable capability
-manifest. Run `greeter hello <name> --style pirate` to use it.
-```
-
-The skill is a signpost. The binary is the manual.
-
-### What errors look like
+JSON on stdout when piped, coloured table when in a terminal. Auto-detected via `std::io::IsTerminal`. Errors include a `suggestion` field telling the agent exactly how to recover.
 
 ```json
 {
@@ -161,29 +192,65 @@ The skill is a signpost. The binary is the manual.
 }
 ```
 
-Exit code 3. The agent reads `code`, reads `suggestion`, acts.
+### 3. Semantic Exit Codes
 
----
+| Code | Meaning | Agent Action |
+|------|---------|-------------|
+| `0` | Success | Continue |
+| `1` | Transient error (IO, network) | Retry |
+| `2` | Config error | Fix setup |
+| `3` | Bad input | Fix arguments |
+| `4` | Rate limited | Wait and retry |
+
+The agent reads the code and knows its next move without parsing the error message.
+
+### 4. Skill Self-Install
+
+The binary carries a minimal SKILL.md compiled in via `include_str!`. One command writes it to `~/.claude/skills/`, `~/.codex/skills/`, `~/.gemini/skills/`. The skill is just a signpost -- a few lines saying "this tool exists, run `agent-info` for the rest." Binary update = skill update. No drift.
+
+### 5. Distribution and Self-Update
+
+Three install paths, one update mechanism:
+
+```
+Install (pick any):
+  brew tap your-org/tap && brew install your-cli   # Homebrew
+  cargo install your-cli                            # crates.io
+  curl -fsSL https://your-cli.dev/install.sh | sh  # shell script
+
+Self-update (built into the binary):
+  your-cli update --check      # check for new version
+  your-cli update              # pull latest from GitHub Releases
+  your-cli skill install       # re-deploy updated skill
+```
 
 ## Mistakes We Made
 
-These came from applying the patterns above to production CLIs and watching agents actually use them. Every one of these shipped before we caught it.
+These came from shipping CLIs with these patterns and watching agents actually use them. Every one of these went to production before we caught it.
 
 **Wrong suggestions.** Our search CLI told agents to set `SEARCH_BRAVE_KEY` when the actual env var was `SEARCH_KEYS_BRAVE`. The agent followed the suggestion exactly, set the wrong variable, and reported auth still broken. Suggestions are not hints. They are instructions. Test them.
 
 **JSON only on the main command.** The primary `search` command returned proper JSON envelopes. But `config show`, `update --check`, and cache-miss paths printed raw text. An agent piping stdout into a JSON parser got a crash instead of data. Every subcommand, every code path, every error -- if it writes to stdout, it must respect the output format.
 
-**Success that was failure.** All eleven providers errored out (rate limits, timeouts, auth). The response: `{"status": "success", "results": []}`. The agent saw success, concluded no results matched the query, and moved on. The actual problem was that nothing worked. We added `partial_success` as a third status for when some providers fail but others return results, and `all_failed` for total failure.
+**Success that was failure.** All eleven providers errored out. The response: `{"status": "success", "results": []}`. The agent saw success and moved on. We added `partial_success` and `all_failed` as additional status values.
 
-**Retry that never fired.** The retry wrapper caught `Http` transport errors. But providers converted HTTP 500/503 into `Api { message }` errors during response parsing. The retry logic never saw a retryable error. Match on HTTP status codes before you parse the body, not after.
+**Dead features in agent-info.** The manifest advertised search modes that existed in code but were never wired into the dispatch path. An agent that called `search --mode deep` got an "unknown mode" error despite agent-info promising it worked. If agent-info says the tool can do something, it must actually do it.
 
-**Dead features in agent-info.** The capability manifest advertised `deep` and `academic` search modes. The functions existed in the code but were never wired into the dispatch path. An agent that called `search --mode deep` got an "unknown mode" error despite agent-info promising it worked. If agent-info says the tool can do something, it must actually do it.
+## What's Inside
 
----
+```
+agent-cli-framework/
+  README.md              # You are here
+  LICENSE                # MIT
+  CONTRIBUTING.md        # How to contribute
+  example/
+    Cargo.toml           # Dependencies
+    src/main.rs          # Complete working example (~280 lines)
+```
 
-## Production CLIs
+The example is a `greeter` CLI that demonstrates all five patterns in one file. It's meant to be read, copied, and adapted.
 
-These CLIs use these patterns in production:
+## Production CLIs Using This Architecture
 
 | CLI | What it does | Install |
 |-----|-------------|---------|
@@ -192,8 +259,6 @@ These CLIs use these patterns in production:
 | [xmaster](https://github.com/199-biotechnologies/xmaster) | X/Twitter CLI with dual backends | `cargo install xmaster` |
 | [email-cli](https://github.com/199-biotechnologies/email-cli) | Agent-friendly email via Resend API | `cargo install email-cli` |
 
----
-
 ## Further Reading
 
 - [MCP vs CLI: Benchmarking AI Agent Cost & Reliability](https://www.scalekit.com/blog/mcp-vs-cli-use) -- Scalekit
@@ -201,8 +266,26 @@ These CLIs use these patterns in production:
 - [CLI Is the New API and MCP](https://jonnyzzz.com/blog/2026/02/20/cli-tools-for-ai-agents/) -- Eugene Petrenko
 - [Reducing MCP Token Usage by 100x](https://www.speakeasy.com/blog/how-we-reduced-token-usage-by-100x-dynamic-toolsets-v2) -- Speakeasy
 
+## Contributing
+
+Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+
+## License
+
+MIT -- see [LICENSE](LICENSE).
+
 ---
 
-## Licence
+<div align="center">
 
-MIT -- Copyright (c) 2025-2026 Boris Djordjevic, Paperfoot AI (SG) Pte. Ltd.
+Built by [Boris Djordjevic](https://github.com/longevityboris) at [199 Biotechnologies](https://github.com/199-biotechnologies) | [Paperfoot AI](https://paperfoot.ai)
+
+<br />
+
+**If this is useful to you:**
+
+[![Star this repo](https://img.shields.io/github/stars/199-biotechnologies/agent-cli-framework?style=for-the-badge&logo=github&label=%E2%AD%90%20Star%20this%20repo&color=yellow)](https://github.com/199-biotechnologies/agent-cli-framework/stargazers)
+&nbsp;&nbsp;
+[![Follow @longevityboris](https://img.shields.io/badge/Follow_%40longevityboris-000000?style=for-the-badge&logo=x&logoColor=white)](https://x.com/longevityboris)
+
+</div>
