@@ -236,6 +236,27 @@ These came from shipping CLIs with these patterns and watching agents actually u
 
 **Dead features in agent-info.** The manifest advertised search modes that existed in code but were never wired into the dispatch path. An agent that called `search --mode deep` got an "unknown mode" error despite agent-info promising it worked. If agent-info says the tool can do something, it must actually do it.
 
+**`--help` returned exit code 3.** We used `try_parse()` and routed all clap errors through the JSON error handler. But `--help` and `--version` aren't errors -- they're informational requests. When an agent ran `tool --help` it got exit code 3 ("bad input") and a suggestion to "check arguments with --help." The agent thought it had made a mistake and tried to fix arguments that were never wrong. The fix: check `e.kind()` for `DisplayHelp` and `DisplayVersion`, wrap the text in a success envelope, and exit 0.
+
+**Inconsistent subcommand names.** Our `inbox` group used `ls` but `account` used `list`. An agent that learned `inbox ls` reasonably tried `account ls` and got an error. Then it tried `account list`, which worked, but the recovery cost tokens and trust. Every CRUD operation should accept both the long form and the short alias (`list`/`ls`, `delete`/`rm`). Use clap's `visible_alias` to make them discoverable. Document aliases in `agent-info` so the agent knows both forms exist.
+
+## Command Naming Conventions
+
+Agents learn patterns from one subcommand group and apply them everywhere. If `inbox` uses `ls` and `account` uses `list`, the agent will fail on one of them every time. Two rules prevent this:
+
+**1. Always alias CRUD subcommands.** Pick one as primary, alias the other with `visible_alias`:
+
+| Operation | Primary | Alias | Attribute |
+|-----------|---------|-------|-----------|
+| List | `list` | `ls` | `#[command(visible_alias = "ls")]` |
+| Create | `create` | `new` | `#[command(visible_alias = "new")]` |
+| Delete | `delete` | `rm` | `#[command(visible_alias = "rm")]` |
+| Show | `show` | `get` | `#[command(visible_alias = "get")]` |
+
+**2. Be consistent across subcommand groups.** If `inbox list` works, `account list` must also work. Same names, same aliases, same argument patterns. An agent that successfully calls one group will attempt the same syntax on every other group.
+
+Document aliases in `agent-info` using `"list | ls"` format so agents can discover both forms from the manifest.
+
 ## What's Inside
 
 ```

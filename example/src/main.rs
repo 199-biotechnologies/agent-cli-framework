@@ -39,6 +39,7 @@ enum Commands {
         style: String,
     },
     /// Machine-readable capability manifest
+    #[command(visible_alias = "info")]
     AgentInfo,
     /// Install a minimal skill file into agent platform directories
     Skill {
@@ -211,7 +212,7 @@ fn cmd_agent_info() {
         "description": "Minimal agent-friendly CLI example",
         "commands": {
             "hello <name>": "Greet someone. Styles: friendly, formal, pirate.",
-            "agent-info": "This manifest.",
+            "agent-info | info": "This manifest.",
             "skill install": "Install skill file to agent platforms.",
             "skill status": "Check skill installation status.",
             "update": "Self-update binary from GitHub Releases.",
@@ -456,6 +457,27 @@ fn main() {
     let cli = match Cli::try_parse() {
         Ok(cli) => cli,
         Err(e) => {
+            // ── Help and version are not errors ────────────────────────
+            // clap surfaces these as Err, but the user asked for info.
+            // Exit 0 so agents don't think they sent bad input.
+            if matches!(
+                e.kind(),
+                clap::error::ErrorKind::DisplayHelp
+                    | clap::error::ErrorKind::DisplayVersion
+            ) {
+                if !std::io::stdout().is_terminal() {
+                    let envelope = serde_json::json!({
+                        "version": "1",
+                        "status": "success",
+                        "data": { "usage": e.to_string().trim_end() },
+                    });
+                    println!("{}", to_json(&envelope));
+                    std::process::exit(0);
+                }
+                e.exit(); // clap prints coloured help and exits 0
+            }
+
+            // ── Actual parse errors ────────────────────────────────────
             let format = Format::detect(false);
             match format {
                 Format::Json => {
@@ -465,7 +487,7 @@ fn main() {
                         "error": {
                             "code": "invalid_input",
                             "message": e.to_string(),
-                            "suggestion": "Run with --help for usage",
+                            "suggestion": "Check arguments with --help",
                         },
                     });
                     eprintln!("{}", to_json(&envelope));
