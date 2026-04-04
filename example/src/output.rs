@@ -25,6 +25,11 @@ impl Format {
             Format::Human
         }
     }
+
+    #[allow(dead_code)] // Available for commands that need conditional logic
+    pub fn is_json(self) -> bool {
+        matches!(self, Format::Json)
+    }
 }
 
 // ── Envelope helpers ────────────────────────────────────────────────────────

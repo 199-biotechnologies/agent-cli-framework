@@ -4,6 +4,7 @@
 /// recovery suggestion that agents can follow literally.
 
 #[derive(thiserror::Error, Debug)]
+#[allow(dead_code)] // Config variant exists to demonstrate exit code 2 pattern
 pub enum AppError {
     #[error("Invalid input: {0}")]
     InvalidInput(String),

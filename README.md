@@ -262,31 +262,34 @@ impl Format {
 
 ### JSON Envelope Helpers
 
-Two functions handle all output. `print_success_or` is the workhorse -- it handles JSON automatically and lets you provide a closure for human output.
+`print_success_or` is the workhorse -- it handles JSON automatically and lets you provide a closure for human output. `print_error` sends errors to stderr in both formats.
 
 ```rust
 use serde::Serialize;
 
-pub fn print_success<T: Serialize>(data: &T) {
-    let envelope = serde_json::json!({
-        "version": "1",
-        "status": "success",
-        "data": data,
-    });
-    println!("{}", serde_json::to_string_pretty(&envelope)
-        .unwrap_or_else(|e| format!(
+fn to_json_pretty<T: Serialize>(value: &T) -> String {
+    serde_json::to_string_pretty(value).unwrap_or_else(|e| {
+        format!(
             r#"{{"version":"1","status":"error","error":{{"code":"serialize","message":"{e}"}}}}"#
-        )));
+        )
+    })
 }
 
 pub fn print_success_or<T: Serialize, F: FnOnce(&T)>(format: Format, data: &T, human: F) {
     match format {
-        Format::Json => print_success(data),
+        Format::Json => {
+            let envelope = serde_json::json!({
+                "version": "1",
+                "status": "success",
+                "data": data,
+            });
+            println!("{}", to_json_pretty(&envelope));
+        }
         Format::Human => human(data),
     }
 }
 
-pub fn print_error(format: Format, err: &dyn CliError) {
+pub fn print_error(format: Format, err: &AppError) {
     let envelope = serde_json::json!({
         "version": "1",
         "status": "error",
@@ -297,10 +300,7 @@ pub fn print_error(format: Format, err: &dyn CliError) {
         },
     });
     match format {
-        Format::Json => {
-            eprintln!("{}", serde_json::to_string_pretty(&envelope)
-                .unwrap_or_else(|_| r#"{"version":"1","status":"error"}"#.into()));
-        }
+        Format::Json => eprintln!("{}", to_json_pretty(&envelope)),
         Format::Human => {
             eprintln!("error: {err}");
             eprintln!("  {}", err.suggestion());
@@ -309,24 +309,9 @@ pub fn print_error(format: Format, err: &dyn CliError) {
 }
 ```
 
-### Error Trait
+### Error Type
 
-Every CLI error type implements three methods. This is the contract that makes semantic exit codes and error envelopes work.
-
-```rust
-pub trait CliError: std::error::Error {
-    /// Maps to process exit code: 1=transient, 2=config, 3=input, 4=rate-limited
-    fn exit_code(&self) -> i32;
-
-    /// Machine-readable code for JSON: "invalid_input", "config_error", etc.
-    fn error_code(&self) -> &str;
-
-    /// Tested recovery instruction. This is executed literally by agents.
-    fn suggestion(&self) -> &str;
-}
-```
-
-Standard error categories that cover most CLIs:
+Every CLI error enum implements three methods. This is the contract that makes semantic exit codes and error envelopes work together.
 
 ```rust
 #[derive(thiserror::Error, Debug)]
@@ -346,42 +331,47 @@ pub enum AppError {
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
 
-    #[error("{0}")]
-    Internal(#[from] anyhow::Error),
+    #[error("Update failed: {0}")]
+    Update(String),
 }
 
-impl CliError for AppError {
-    fn exit_code(&self) -> i32 {
+impl AppError {
+    /// Maps to process exit code: 1=transient, 2=config, 3=input, 4=rate-limited
+    pub fn exit_code(&self) -> i32 {
         match self {
             Self::InvalidInput(_) => 3,
             Self::Config(_) => 2,
-            Self::Transient(_) | Self::Io(_) | Self::Internal(_) => 1,
+            Self::Transient(_) | Self::Io(_) | Self::Update(_) => 1,
             Self::RateLimited(_) => 4,
         }
     }
 
-    fn error_code(&self) -> &str {
+    /// Machine-readable code for JSON: "invalid_input", "config_error", etc.
+    pub fn error_code(&self) -> &str {
         match self {
             Self::InvalidInput(_) => "invalid_input",
             Self::Config(_) => "config_error",
             Self::Transient(_) => "transient_error",
             Self::RateLimited(_) => "rate_limited",
             Self::Io(_) => "io_error",
-            Self::Internal(_) => "internal_error",
+            Self::Update(_) => "update_error",
         }
     }
 
-    fn suggestion(&self) -> &str {
+    /// Tested recovery instruction. Agents follow this literally.
+    pub fn suggestion(&self) -> &str {
         match self {
-            Self::InvalidInput(_) => "Check arguments with --help",
+            Self::InvalidInput(_) => "Check arguments with: mycli --help",
             Self::Config(_) => "Check config with: mycli config show",
             Self::Transient(_) | Self::Io(_) => "Retry the command",
             Self::RateLimited(_) => "Wait a moment and retry",
-            Self::Internal(_) => "Retry, or report the issue if it persists",
+            Self::Update(_) => "Retry later, or install manually via cargo install mycli",
         }
     }
 }
 ```
+
+Adapt the variants to your domain. The three methods (`exit_code`, `error_code`, `suggestion`) are the contract -- keep those consistent.
 
 ### Entry Point Runner
 

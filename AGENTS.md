@@ -65,17 +65,17 @@ Extended status values for multi-source operations: `success`, `partial_success`
 
 ## Error Pattern
 
-Every error enum implements three methods:
+Every error enum implements three methods -- the contract that connects errors to exit codes and JSON envelopes:
 
 ```rust
 impl AppError {
-    fn exit_code(&self) -> i32;    // 1, 2, 3, or 4
-    fn error_code(&self) -> &str;  // "invalid_input", "config_error", etc.
-    fn suggestion(&self) -> &str;  // Tested recovery instruction
+    pub fn exit_code(&self) -> i32;    // 1=transient, 2=config, 3=input, 4=rate-limited
+    pub fn error_code(&self) -> &str;  // "invalid_input", "config_error", etc.
+    pub fn suggestion(&self) -> &str;  // Tested recovery instruction (agents follow literally)
 }
 ```
 
-Standard categories: `InvalidInput` (3), `Config` (2), `Transient`/`Io` (1), `RateLimited` (4).
+Standard categories: `InvalidInput` (3), `Config` (2), `Transient`/`Io`/`Update` (1), `RateLimited` (4).
 
 ## Entry Point Pattern
 
