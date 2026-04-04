@@ -50,7 +50,7 @@ No databases to spin up. No services to connect to. Config is a TOML file. State
 
 ### 3. Two audiences, one stdout
 
-Humans get colored tables. Agents get JSON envelopes. The binary detects which and adapts automatically. Both paths are first-class. If a command writes to stdout, it respects the output format -- no exceptions, no code paths that leak raw text.
+Humans get colored, human-readable output. Agents get JSON envelopes. The binary detects which and adapts automatically. Both paths are first-class. If a command writes to stdout, it respects the output format -- no exceptions, no code paths that leak raw text.
 
 ### 4. Errors are instructions
 

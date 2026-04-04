@@ -37,7 +37,7 @@ impl Format {
 fn to_json_pretty<T: Serialize>(value: &T) -> String {
     serde_json::to_string_pretty(value).unwrap_or_else(|e| {
         format!(
-            r#"{{"version":"1","status":"error","error":{{"code":"serialize","message":"{e}"}}}}"#
+            r#"{{"version":"1","status":"error","error":{{"code":"serialize","message":"{e}","suggestion":"Retry the command"}}}}"#
         )
     })
 }

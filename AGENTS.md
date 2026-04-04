@@ -27,7 +27,7 @@ src/
 
 ## Non-Negotiable Rules
 
-1. **Every stdout path respects output format.** JSON when piped, colored table in terminal. No exceptions. No raw text leaks.
+1. **Every stdout path respects output format.** JSON when piped, colored human-readable output in terminal. No exceptions. No raw text leaks.
 2. **`--help` and `--version` exit 0.** They are not errors. Wrap in success envelope when piped.
 3. **Errors go to stderr.** Both JSON and human-readable. `tool cmd | jq` must never break on error text.
 4. **Exit codes are: 0=success, 1=retry, 2=config, 3=input, 4=rate-limited.** Nothing else.
@@ -148,8 +148,8 @@ Optional:
 ## Global Flags
 
 Always at the top-level `Cli` struct:
-- `--json` -- force JSON output even in terminal
-- `--quiet` -- suppress non-essential output (optional)
+- `--json` -- force JSON output even in terminal (required)
+- `--quiet` -- suppress non-essential output (add if your CLI has verbose default output)
 
 ## Dependencies
 

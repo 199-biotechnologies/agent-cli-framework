@@ -25,6 +25,7 @@ pub fn run() {
             "1": "Transient error (IO, network) -- retry",
             "2": "Config error -- fix setup",
             "3": "Bad input -- fix arguments",
+            "4": "Rate limited -- wait and retry",
         },
         "envelope": {
             "version": "1",
@@ -32,10 +33,6 @@ pub fn run() {
             "error": "{ version, status, error: { code, message, suggestion } }",
         },
         "auto_json_when_piped": true,
-        "env_prefix": "GREETER_",
     });
-    println!(
-        "{}",
-        serde_json::to_string_pretty(&info).unwrap()
-    );
+    println!("{}", serde_json::to_string_pretty(&info).unwrap());
 }
