@@ -12,7 +12,9 @@
 
 <br />
 
+[![CI](https://github.com/199-biotechnologies/agent-cli-framework/actions/workflows/ci.yml/badge.svg)](https://github.com/199-biotechnologies/agent-cli-framework/actions/workflows/ci.yml)
 [![Rust](https://img.shields.io/badge/Rust-000000?style=for-the-badge&logo=rust&logoColor=white)](https://www.rust-lang.org/)
+[![MSRV 1.85+](https://img.shields.io/badge/MSRV-1.85%2B-orange?style=for-the-badge)](https://www.rust-lang.org/)
 [![MIT License](https://img.shields.io/badge/License-MIT-blue?style=for-the-badge)](LICENSE)
 [![PRs Welcome](https://img.shields.io/badge/PRs-Welcome-brightgreen?style=for-the-badge)](CONTRIBUTING.md)
 
@@ -20,7 +22,7 @@
 
 Five patterns turn any Rust CLI into a tool AI agents can pick up and use without documentation, MCP servers, or skill files. The binary describes itself, returns structured output, and uses semantic exit codes. Your CLI becomes the tool, the documentation, and the API -- all in one binary.
 
-[Philosophy](#philosophy) | [Why This Exists](#why-this-exists) | [Patterns](#patterns) | [Reusable Modules](#reusable-modules) | [Example](#example) | [Invariants](#invariants)
+[Philosophy](#philosophy) | [Why This Exists](#why-this-exists) | [Patterns](#patterns) | [Reusable Modules](#reusable-modules) | [Getting Started](#getting-started-build-your-own) | [Example](#example) | [Invariants](#invariants)
 
 </div>
 
@@ -616,6 +618,67 @@ pub fn should_retry(err: &reqwest::Error) -> bool {
     err.is_timeout() || err.is_connect() || err.is_request()
 }
 ```
+
+---
+
+## Getting Started: Build Your Own
+
+**1. Copy the scaffold:**
+
+```bash
+cp -r example/ my-cli/
+cd my-cli/
+```
+
+**2. Rename the binary** in `Cargo.toml`:
+
+```toml
+[package]
+name = "my-cli"                      # Your binary name
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+```
+
+Update the `[[bin]]` section and the `#[command(name = "...")]` in `cli.rs`.
+
+**3. Replace the `hello` command** with your domain logic. Keep the same structure:
+
+```
+src/
+  main.rs           # Entry point (barely changes between CLIs)
+  cli.rs            # clap derive definitions
+  config.rs         # 3-tier config loading
+  error.rs          # AppError with exit_code(), error_code(), suggestion()
+  output.rs         # Format detection + envelope helpers
+  commands/
+    mod.rs
+    agent_info.rs   # Update: list YOUR commands
+    your_command.rs  # Your domain logic
+    skill.rs        # Skill content auto-derived from CARGO_PKG_NAME
+    config.rs       # config show/path (works out of the box)
+    update.rs       # Self-update (just change repo owner/name in config)
+```
+
+**4. Update `agent-info`** to list your actual commands with argument schemas. This is the contract agents bootstrap from.
+
+**5. Write tests and run them:**
+
+```bash
+cargo test                           # All integration tests
+cargo run -- agent-info              # Verify manifest
+cargo run -- config show             # Verify config loading
+echo '{}' | cargo run -- hello Test  # Verify JSON envelope in pipe
+```
+
+**6. Ship it:**
+
+```bash
+cargo build --release                # Single binary, sub-10ms cold start
+./target/release/my-cli skill install  # Deploy to Claude/Codex/Gemini
+```
+
+The framework conventions (`env!("CARGO_PKG_NAME")`, config loading, skill install) adapt automatically when you rename the package. No find-and-replace needed.
 
 ---
 

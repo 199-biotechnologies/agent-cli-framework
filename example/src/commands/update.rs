@@ -1,7 +1,8 @@
 use serde::Serialize;
 
+use crate::config::AppConfig;
 use crate::error::AppError;
-use crate::output::{Format, print_success_or};
+use crate::output::{self, Ctx};
 
 #[derive(Serialize)]
 struct UpdateResult {
@@ -10,14 +11,26 @@ struct UpdateResult {
     status: String,
 }
 
-pub fn run(format: Format, check: bool) -> Result<(), AppError> {
+pub fn run(ctx: Ctx, check: bool, config: &AppConfig) -> Result<(), AppError> {
     let current = env!("CARGO_PKG_VERSION");
+    let name = env!("CARGO_PKG_NAME");
 
-    // Replace owner/repo with your GitHub repo.
+    if !config.update.enabled {
+        let result = UpdateResult {
+            current_version: current.into(),
+            latest_version: current.into(),
+            status: "disabled".into(),
+        };
+        output::print_success_or(ctx, &result, |_| {
+            println!("Self-update is disabled in config");
+        });
+        return Ok(());
+    }
+
     let updater = self_update::backends::github::Update::configure()
-        .repo_owner("199-biotechnologies")
-        .repo_name("agent-cli-framework")
-        .bin_name("greeter")
+        .repo_owner(&config.update.owner)
+        .repo_name(&config.update.repo)
+        .bin_name(name)
         .current_version(current)
         .build()
         .map_err(|e| AppError::Update(e.to_string()))?;
@@ -31,15 +44,22 @@ pub fn run(format: Format, check: bool) -> Result<(), AppError> {
 
         let result = UpdateResult {
             current_version: current.into(),
-            latest_version: v.clone(),
-            status: if up_to_date { "up_to_date".into() } else { "update_available".into() },
+            latest_version: v,
+            status: if up_to_date {
+                "up_to_date".into()
+            } else {
+                "update_available".into()
+            },
         };
-        print_success_or(format, &result, |r| {
+        output::print_success_or(ctx, &result, |r| {
             if up_to_date {
                 println!("Up to date (v{})", r.current_version);
             } else {
-                println!("Update available: v{} -> v{}", r.current_version, r.latest_version);
-                println!("Run `greeter update` to install");
+                println!(
+                    "Update available: v{} -> v{}",
+                    r.current_version, r.latest_version
+                );
+                println!("Run `{name} update` to install");
             }
         });
     } else {
@@ -51,15 +71,22 @@ pub fn run(format: Format, check: bool) -> Result<(), AppError> {
 
         let result = UpdateResult {
             current_version: current.into(),
-            latest_version: v.clone(),
-            status: if up_to_date { "up_to_date".into() } else { "updated".into() },
+            latest_version: v,
+            status: if up_to_date {
+                "up_to_date".into()
+            } else {
+                "updated".into()
+            },
         };
-        print_success_or(format, &result, |r| {
+        output::print_success_or(ctx, &result, |r| {
             if up_to_date {
                 println!("Already up to date (v{})", r.current_version);
             } else {
-                println!("Updated: v{} -> v{}", r.current_version, r.latest_version);
-                println!("Run `greeter skill install` to update agent skills");
+                println!(
+                    "Updated: v{} -> v{}",
+                    r.current_version, r.latest_version
+                );
+                println!("Run `{name} skill install` to update agent skills");
             }
         });
     }

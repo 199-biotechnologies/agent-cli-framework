@@ -7,6 +7,10 @@ pub struct Cli {
     #[arg(long, global = true)]
     pub json: bool,
 
+    /// Suppress informational output
+    #[arg(long, global = true)]
+    pub quiet: bool,
+
     #[command(subcommand)]
     pub command: Commands,
 }
@@ -48,11 +52,22 @@ pub enum Commands {
         #[command(subcommand)]
         action: SkillAction,
     },
+    /// Manage configuration
+    Config {
+        #[command(subcommand)]
+        action: ConfigAction,
+    },
     /// Self-update from GitHub Releases
     Update {
         /// Check only, don't install
         #[arg(long)]
         check: bool,
+    },
+    /// Hidden: deterministic exit-code trigger for contract tests
+    #[command(hide = true)]
+    Contract {
+        /// Exit code to trigger (0-4)
+        code: i32,
     },
 }
 
@@ -62,4 +77,12 @@ pub enum SkillAction {
     Install,
     /// Check which platforms have the skill installed
     Status,
+}
+
+#[derive(Subcommand)]
+pub enum ConfigAction {
+    /// Display effective merged configuration
+    Show,
+    /// Print configuration file path
+    Path,
 }

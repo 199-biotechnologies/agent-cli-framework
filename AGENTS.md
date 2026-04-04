@@ -14,14 +14,17 @@ Split your CLI into focused modules. Never write a monolithic main.rs.
 src/
   main.rs         # Entry point only: parse, detect format, dispatch, exit
   cli.rs          # Clap derive: Cli struct + Commands enum + Args structs
+  config.rs       # AppConfig + load() via figment (3-tier precedence)
   error.rs        # Error enum with exit_code(), error_code(), suggestion()
-  output.rs       # Format enum + print_success_or() + print_error()
+  output.rs       # Format enum, Ctx struct, print_success_or(), print_error()
   commands/
     mod.rs        # Re-exports
     <command>.rs  # One file per domain command
-    agent_info.rs # Capability manifest (always present)
+    agent_info.rs # Capability manifest with arg schemas (always present)
     skill.rs      # Skill install + status (always present)
+    config.rs     # config show/path (always present)
     update.rs     # Self-update (optional)
+  tests/          # Integration tests verifying contracts
   Cargo.toml
 ```
 
@@ -38,7 +41,7 @@ src/
 
 ## Output Format
 
-Detect automatically:
+Detect automatically. Bundle format + quiet into an output context:
 
 ```rust
 pub enum Format { Json, Human }
@@ -49,7 +52,17 @@ impl Format {
         else { Format::Human }
     }
 }
+
+pub struct Ctx { pub format: Format, pub quiet: bool }
+
+impl Ctx {
+    pub fn new(json_flag: bool, quiet: bool) -> Self {
+        Self { format: Format::detect(json_flag), quiet }
+    }
+}
 ```
+
+Pass `Ctx` to all commands. `--quiet` suppresses human output; JSON always emits.
 
 Success envelope (stdout):
 ```json
@@ -107,9 +120,13 @@ fn main() {
             std::process::exit(3);
         }
     };
-    let format = Format::detect(cli.json);
-    if let Err(e) = run(cli, format) {
-        print_error(format, &e);
+    let ctx = Ctx::new(cli.json, cli.quiet);
+    let config = config::load().unwrap_or_else(|e| {
+        print_error(ctx.format, &e);
+        std::process::exit(e.exit_code());
+    });
+    if let Err(e) = run(cli, ctx, &config) {
+        print_error(ctx.format, &e);
         std::process::exit(e.exit_code());
     }
 }
@@ -147,16 +164,18 @@ Every CLI has these built-in commands:
 - `skill install` -- write SKILL.md to `~/.claude/skills/<name>/`, `~/.codex/skills/<name>/`, `~/.gemini/skills/<name>/`
 - `skill status` -- check installation status
 
+Standard:
+- `config show` -- display effective merged config (secrets masked)
+- `config path` -- print config file path
+
 Optional:
 - `update [--check]` -- self-update from GitHub Releases
-- `config show` -- display current config (secrets masked)
-- `config set <key> <value>` -- update config
 
 ## Global Flags
 
 Always at the top-level `Cli` struct:
-- `--json` -- force JSON output even in terminal (required)
-- `--quiet` -- suppress non-essential output (add if your CLI has verbose default output)
+- `--json` -- force JSON output even in terminal (required, always present)
+- `--quiet` -- suppress informational human output; JSON always emits (required, always present)
 
 ## Dependencies
 

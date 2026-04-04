@@ -48,11 +48,22 @@ impl AppError {
 
     pub fn suggestion(&self) -> &str {
         match self {
-            Self::InvalidInput(_) => "Check arguments with: greeter --help",
-            Self::Config(_) => "Check config file at ~/.config/greeter/config.toml",
+            Self::InvalidInput(_) => concat!(
+                "Check arguments with: ",
+                env!("CARGO_PKG_NAME"),
+                " --help"
+            ),
+            Self::Config(_) => concat!(
+                "Check config with: ",
+                env!("CARGO_PKG_NAME"),
+                " config path"
+            ),
             Self::Transient(_) | Self::Io(_) => "Retry the command",
             Self::RateLimited(_) => "Wait a moment and retry",
-            Self::Update(_) => "Retry later, or install manually via cargo install greeter",
+            Self::Update(_) => concat!(
+                "Retry later, or install manually via cargo install ",
+                env!("CARGO_PKG_NAME")
+            ),
         }
     }
 }

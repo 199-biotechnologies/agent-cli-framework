@@ -2,7 +2,7 @@ use serde::Serialize;
 
 use crate::cli::Style;
 use crate::error::AppError;
-use crate::output::{Format, print_success_or};
+use crate::output::{self, Ctx};
 
 #[derive(Serialize)]
 struct Greeting {
@@ -11,7 +11,7 @@ struct Greeting {
     message: String,
 }
 
-pub fn run(format: Format, name: String, style: Style) -> Result<(), AppError> {
+pub fn run(ctx: Ctx, name: String, style: Style) -> Result<(), AppError> {
     let name = name.trim().to_string();
     if name.is_empty() {
         return Err(AppError::InvalidInput("name cannot be empty".into()));
@@ -29,7 +29,7 @@ pub fn run(format: Format, name: String, style: Style) -> Result<(), AppError> {
         message,
     };
 
-    print_success_or(format, &greeting, |g| {
+    output::print_success_or(ctx, &greeting, |g| {
         use owo_colors::OwoColorize;
         println!("{}", g.message.green());
     });

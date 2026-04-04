@@ -3,9 +3,9 @@
 /// - Terminal (TTY): colored human output
 /// - Piped/redirected: JSON envelope
 /// - `--json` flag: force JSON even in terminal
+/// - `--quiet` flag: suppress human informational output
 ///
 /// All JSON serialization goes through safe_json_string() which never panics.
-
 use serde::Serialize;
 use std::io::IsTerminal;
 
@@ -28,13 +28,31 @@ impl Format {
         }
     }
 
-    #[allow(dead_code)] // Available for commands that need conditional logic
+    #[allow(dead_code)]
     pub fn is_json(self) -> bool {
         matches!(self, Format::Json)
     }
 }
 
-// ── Safe JSON serialization ─────────────────────────────────────────────────
+// ── Output context ─────────────────────────────────────────────────────────
+// Bundles format + quiet so commands take one parameter instead of two.
+
+#[derive(Clone, Copy)]
+pub struct Ctx {
+    pub format: Format,
+    pub quiet: bool,
+}
+
+impl Ctx {
+    pub fn new(json_flag: bool, quiet: bool) -> Self {
+        Self {
+            format: Format::detect(json_flag),
+            quiet,
+        }
+    }
+}
+
+// ── Safe JSON serialization ────────────────────────────────────────────────
 
 /// Serialize to pretty JSON. On failure, return a valid JSON error envelope
 /// built entirely from serde_json (no string interpolation, no panic risk).
@@ -42,7 +60,6 @@ fn safe_json_string<T: Serialize>(value: &T) -> String {
     match serde_json::to_string_pretty(value) {
         Ok(s) => s,
         Err(e) => {
-            // Build fallback with serde_json to guarantee valid JSON.
             let fallback = serde_json::json!({
                 "version": "1",
                 "status": "error",
@@ -52,8 +69,9 @@ fn safe_json_string<T: Serialize>(value: &T) -> String {
                     "suggestion": "Retry the command",
                 },
             });
-            serde_json::to_string_pretty(&fallback)
-                .unwrap_or_else(|_| r#"{"version":"1","status":"error","error":{"code":"serialize","message":"serialization failed","suggestion":"Retry the command"}}"#.to_string())
+            serde_json::to_string_pretty(&fallback).unwrap_or_else(|_| {
+                r#"{"version":"1","status":"error","error":{"code":"serialize","message":"serialization failed","suggestion":"Retry the command"}}"#.to_string()
+            })
         }
     }
 }
@@ -61,8 +79,9 @@ fn safe_json_string<T: Serialize>(value: &T) -> String {
 // ── Envelope helpers ────────────────────────────────────────────────────────
 
 /// Print success envelope (JSON) or call the human closure.
-pub fn print_success_or<T: Serialize, F: FnOnce(&T)>(format: Format, data: &T, human: F) {
-    match format {
+/// When quiet + human, the closure is skipped. JSON always emits.
+pub fn print_success_or<T: Serialize, F: FnOnce(&T)>(ctx: Ctx, data: &T, human: F) {
+    match ctx.format {
         Format::Json => {
             let envelope = serde_json::json!({
                 "version": "1",
@@ -71,11 +90,13 @@ pub fn print_success_or<T: Serialize, F: FnOnce(&T)>(format: Format, data: &T, h
             });
             println!("{}", safe_json_string(&envelope));
         }
-        Format::Human => human(data),
+        Format::Human if !ctx.quiet => human(data),
+        Format::Human => {} // quiet: suppress human output
     }
 }
 
 /// Print error to stderr in the appropriate format.
+/// Errors are never suppressed by --quiet.
 pub fn print_error(format: Format, err: &AppError) {
     let envelope = serde_json::json!({
         "version": "1",
@@ -118,7 +139,7 @@ pub fn print_clap_error(format: Format, err: &clap::Error) {
                 "error": {
                     "code": "invalid_input",
                     "message": err.to_string(),
-                    "suggestion": "Check arguments with: greeter --help",
+                    "suggestion": format!("Check arguments with: {} --help", env!("CARGO_PKG_NAME")),
                 },
             });
             eprintln!("{}", safe_json_string(&envelope));
