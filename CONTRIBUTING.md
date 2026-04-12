@@ -58,7 +58,7 @@ example/
 
 ## Guidelines
 
-- The example demonstrates the five core patterns plus the entry point, error type, and output helpers. Reusable modules like config loading, secret handling, and HTTP retry are documented as code patterns in the README -- they don't need to be in the example.
+- The example demonstrates the core patterns plus the entry point, error type, and output helpers. Reusable modules like config loading, secret handling, doctor, duplicate guard, and HTTP retry are documented as code patterns in the README -- they don't need to be in the example.
 - Keep the example minimal -- it demonstrates patterns, not a real product.
 - Ensure the README, AGENTS.md, and example stay consistent with each other.
 - All new patterns must have corresponding integration tests.

@@ -23,6 +23,7 @@ src/
     agent_info.rs # Capability manifest with arg schemas (always present)
     skill.rs      # Skill install + status (always present)
     config.rs     # config show/path (always present)
+    doctor.rs     # Dependency diagnostics (optional, recommended)
     update.rs     # Self-update (optional)
   tests/          # Integration tests verifying contracts
   Cargo.toml
@@ -169,7 +170,12 @@ Standard:
 - `config path` -- print config file path
 
 Optional:
+- `doctor` -- check external dependencies (API keys, binaries, endpoints). Returns structured pass/warn/fail. Exit 0 if all pass, exit 2 if any fail.
 - `update [--check]` -- self-update from GitHub Releases
+
+## Rich Help
+
+`--help` output should include a Tips section and an Examples section after the standard clap output, using `after_long_help` in clap. Tips are contextual guidance (3-8 bullets). Examples are real commands agents can copy. This is especially valuable for agents that read `--help` to bootstrap usage.
 
 ## Global Flags
 
@@ -196,6 +202,19 @@ strip = true
 opt-level = 3
 ```
 
+## Duplicate Guard
+
+For commands that do expensive or irreversible work (API calls, long computations, deployments), prevent accidental duplicate runs. Use a lock file in the state directory. The pattern:
+
+1. Before starting: check for `~/.local/share/<app>/locks/<operation>.lock`
+2. If lock exists and is fresh (< 1 hour): exit 3 with suggestion "Operation already running. Use --force to override."
+3. If lock exists but stale (> 1 hour): warn and continue
+4. Create lock file with PID + timestamp
+5. Remove lock on completion (success or failure)
+6. `--force` flag bypasses the guard
+
+Lock file format: `{"pid": 12345, "started_at": "2026-04-12T10:00:00Z", "operation": "deploy"}`
+
 ## Reference
 
-See the `example/` directory in this repo for a working implementation of the five core patterns and the entry point, error type, and output helpers. Config loading, secret handling, XDG paths, and HTTP retry are documented as code patterns in the README's Reusable Modules section.
+See the `example/` directory in this repo for a working implementation of the core patterns and the entry point, error type, and output helpers. Config loading, secret handling, XDG paths, doctor, duplicate guard, and HTTP retry are documented as code patterns in the README's Reusable Modules section.

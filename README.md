@@ -20,7 +20,7 @@
 
 ---
 
-Five patterns turn any Rust CLI into a tool AI agents can pick up and use without documentation, MCP servers, or skill files. The binary describes itself, returns structured output, and uses semantic exit codes. Your CLI becomes the tool, the documentation, and the API -- all in one binary.
+Eight patterns turn any Rust CLI into a tool AI agents can pick up and use without documentation, MCP servers, or skill files. The binary describes itself, returns structured output, uses semantic exit codes, teaches usage through rich help, diagnoses its own dependencies, and guards against duplicate runs. Your CLI becomes the tool, the documentation, and the API -- all in one binary.
 
 [Philosophy](#philosophy) | [Why This Exists](#why-this-exists) | [Patterns](#patterns) | [Reusable Modules](#reusable-modules) | [Getting Started](#getting-started-build-your-own) | [Example](#example) | [Invariants](#invariants)
 
@@ -211,6 +211,84 @@ The binary carries a minimal SKILL.md as an embedded constant (via `const` or `i
 ```
 
 The skill is a signpost -- a few lines saying "this tool exists, run `agent-info` for everything else." All workflow knowledge lives in the binary. Binary update = skill update. No drift.
+
+### Pattern 6: Rich Help with Tips and Examples
+
+`--help` is the first thing an agent reads. Clap's auto-generated help lists flags but doesn't teach usage. Add contextual tips and real-world examples using clap's `after_long_help`:
+
+```rust
+#[derive(Parser)]
+#[command(
+    name = "mycli",
+    about = "What this CLI does in one sentence",
+    after_long_help = HELP_FOOTER,
+)]
+pub struct Cli { /* ... */ }
+
+const HELP_FOOTER: &str = "\
+Tips:
+  • Run `mycli agent-info | jq` to see the full capability manifest
+  • Pipe output to jq for structured data: `mycli search \"query\" | jq '.data.results'`
+  • Config is 3-tier: defaults < config.toml < env vars (MYCLI_ prefix)
+  • Use --quiet to suppress human output while keeping JSON intact
+  • doctor checks dependencies before you start: `mycli doctor`
+
+Examples:
+  mycli search \"CRISPR gene therapy\" --mode academic
+    Search academic sources for gene therapy papers
+
+  mycli config set keys.api_key sk-proj-abc123
+    Set your API key (stored in ~/.config/mycli/config.toml)
+
+  mycli search \"latest news\" | jq '.data.results[0]'
+    Get the first result as structured JSON";
+```
+
+Tips should be 3-8 bullets covering the most common agent workflows. Examples should be 3-5 real commands with one-line descriptions. Both survive into `--help` output where agents and humans read them.
+
+### Pattern 7: Doctor -- Dependency Diagnostics
+
+For CLIs with external dependencies (API keys, binaries on PATH, network endpoints), a `doctor` command tells agents "can this tool actually work right now?" before they attempt real work.
+
+```bash
+# Agent runs doctor before first use
+mycli doctor --json | jq '.data.checks[] | select(.status == "fail")'
+
+# Human output
+mycli doctor
+```
+
+Returns structured pass/warn/fail checks:
+
+```json
+{
+  "version": "1",
+  "status": "success",
+  "data": {
+    "checks": [
+      { "name": "config_file", "status": "pass", "message": "~/.config/mycli/config.toml" },
+      { "name": "api_key",     "status": "pass", "message": "MYCLI_API_KEY set (sk-p...1234)" },
+      { "name": "ffmpeg",      "status": "fail", "message": "ffmpeg not found on PATH",
+        "suggestion": "Install ffmpeg: brew install ffmpeg" }
+    ],
+    "summary": { "pass": 2, "warn": 0, "fail": 1 }
+  }
+}
+```
+
+Exit code: `0` if all checks pass, `2` (config error) if any fail. Agents use this to self-diagnose before retrying.
+
+### Pattern 8: Duplicate Guard
+
+Prevent expensive or irreversible operations from running twice accidentally. Use a lock file in the state directory with PID tracking and staleness detection.
+
+When an agent retries a failed command, or two agents target the same CLI concurrently, the guard catches it and suggests `--force` instead of silently doubling the work (or cost).
+
+```bash
+mycli deploy                  # Creates lock, runs deploy
+mycli deploy                  # "Operation already running. Use --force to override." (exit 3)
+mycli deploy --force          # Bypasses guard
+```
 
 ### Pattern 5: Self-Update
 
@@ -614,6 +692,226 @@ Agents learn patterns from one subcommand group and apply them everywhere. Two r
 
 Document aliases in `agent-info` using `"list | ls"` format so agents discover both forms.
 
+### Doctor Command
+
+Structured dependency checker. Each check returns pass/warn/fail with a message and optional suggestion. The doctor command itself always exits 0 on all-pass, 2 on any failure.
+
+```rust
+use serde::Serialize;
+
+#[derive(Serialize)]
+pub struct DoctorCheck {
+    pub name: &'static str,
+    pub status: CheckStatus,
+    pub message: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub suggestion: Option<String>,
+}
+
+#[derive(Serialize, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum CheckStatus { Pass, Warn, Fail }
+
+#[derive(Serialize)]
+pub struct DoctorReport {
+    pub checks: Vec<DoctorCheck>,
+    pub summary: DoctorSummary,
+}
+
+#[derive(Serialize)]
+pub struct DoctorSummary {
+    pub pass: usize,
+    pub warn: usize,
+    pub fail: usize,
+}
+
+impl DoctorReport {
+    pub fn has_failures(&self) -> bool {
+        self.summary.fail > 0
+    }
+}
+
+/// Check if a binary exists on PATH.
+pub fn check_binary(name: &str) -> DoctorCheck {
+    match which::which(name) {
+        Ok(path) => DoctorCheck {
+            name: "binary",
+            status: CheckStatus::Pass,
+            message: format!("{name} found at {}", path.display()),
+            suggestion: None,
+        },
+        Err(_) => DoctorCheck {
+            name: "binary",
+            status: CheckStatus::Fail,
+            message: format!("{name} not found on PATH"),
+            suggestion: Some(format!("Install {name}: brew install {name}")),
+        },
+    }
+}
+
+/// Check if an env var is set and non-empty.
+pub fn check_env_var(var: &str) -> DoctorCheck {
+    match std::env::var(var) {
+        Ok(v) if !v.trim().is_empty() => DoctorCheck {
+            name: "env_var",
+            status: CheckStatus::Pass,
+            message: format!("{var} set ({})", mask_secret(&v)),
+            suggestion: None,
+        },
+        _ => DoctorCheck {
+            name: "env_var",
+            status: CheckStatus::Fail,
+            message: format!("{var} not set"),
+            suggestion: Some(format!("Set {var} in your environment or config file")),
+        },
+    }
+}
+
+/// Check if config file exists.
+pub fn check_config_file(path: &std::path::Path) -> DoctorCheck {
+    if path.exists() {
+        DoctorCheck {
+            name: "config_file",
+            status: CheckStatus::Pass,
+            message: format!("{}", path.display()),
+            suggestion: None,
+        }
+    } else {
+        DoctorCheck {
+            name: "config_file",
+            status: CheckStatus::Warn,
+            message: format!("{} not found (using defaults)", path.display()),
+            suggestion: Some(format!("Create config: mycli config show > {}", path.display())),
+        }
+    }
+}
+```
+
+Add `which = "7"` to dependencies if checking binaries on PATH. Compose checks in your doctor command:
+
+```rust
+pub fn run_doctor(ctx: Ctx, config: &Config) -> Result<(), AppError> {
+    let mut checks = vec![
+        check_config_file(&config.path),
+        check_env_var("MYCLI_API_KEY"),
+    ];
+    // Add domain-specific checks
+    if config.features.transcription {
+        checks.push(check_binary("ffmpeg"));
+    }
+    let summary = DoctorSummary {
+        pass: checks.iter().filter(|c| c.status == CheckStatus::Pass).count(),
+        warn: checks.iter().filter(|c| c.status == CheckStatus::Warn).count(),
+        fail: checks.iter().filter(|c| c.status == CheckStatus::Fail).count(),
+    };
+    let report = DoctorReport { checks, summary };
+    let has_failures = report.has_failures();
+    print_success_or(ctx, &report, |r| {
+        for check in &r.checks {
+            let icon = match check.status {
+                CheckStatus::Pass => "✓",
+                CheckStatus::Warn => "!",
+                CheckStatus::Fail => "✗",
+            };
+            eprintln!("  {icon} {}: {}", check.name, check.message);
+        }
+    });
+    if has_failures {
+        return Err(AppError::Config("Doctor found issues. Run with --json for details.".into()));
+    }
+    Ok(())
+}
+```
+
+### Duplicate Guard
+
+Lock file pattern for expensive operations. Uses PID tracking to detect stale locks from crashed processes.
+
+```rust
+use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
+
+#[derive(Serialize, Deserialize)]
+struct LockFile {
+    pid: u32,
+    started_at: String,
+    operation: String,
+}
+
+const STALE_THRESHOLD_SECS: u64 = 3600; // 1 hour
+
+pub struct DuplicateGuard {
+    lock_path: PathBuf,
+}
+
+impl DuplicateGuard {
+    pub fn new(data_dir: &std::path::Path, operation: &str) -> Self {
+        let lock_dir = data_dir.join("locks");
+        let _ = std::fs::create_dir_all(&lock_dir);
+        Self {
+            lock_path: lock_dir.join(format!("{operation}.lock")),
+        }
+    }
+
+    /// Check if the operation is already running. Returns Ok(()) if safe to proceed.
+    pub fn acquire(&self, force: bool) -> Result<(), AppError> {
+        if let Ok(contents) = std::fs::read_to_string(&self.lock_path) {
+            if let Ok(lock) = serde_json::from_str::<LockFile>(&contents) {
+                // Check if the process is still alive
+                let pid_alive = unsafe { libc::kill(lock.pid as i32, 0) == 0 };
+                let is_stale = chrono::Utc::now()
+                    .signed_duration_since(
+                        chrono::DateTime::parse_from_rfc3339(&lock.started_at)
+                            .unwrap_or_default()
+                    )
+                    .num_seconds() > STALE_THRESHOLD_SECS as i64;
+
+                if pid_alive && !is_stale && !force {
+                    return Err(AppError::InvalidInput(format!(
+                        "Operation '{}' already running (pid {}). Use --force to override.",
+                        lock.operation, lock.pid
+                    )));
+                }
+            }
+        }
+        // Write new lock
+        let lock = LockFile {
+            pid: std::process::id(),
+            started_at: chrono::Utc::now().to_rfc3339(),
+            operation: self.lock_path.file_stem()
+                .unwrap_or_default().to_string_lossy().into(),
+        };
+        std::fs::write(&self.lock_path, serde_json::to_string(&lock).unwrap())?;
+        Ok(())
+    }
+
+    /// Release the lock. Call on completion (success or failure).
+    pub fn release(&self) {
+        let _ = std::fs::remove_file(&self.lock_path);
+    }
+}
+
+impl Drop for DuplicateGuard {
+    fn drop(&mut self) {
+        self.release();
+    }
+}
+```
+
+Usage in a command:
+
+```rust
+pub fn run_deploy(ctx: Ctx, config: &Config, force: bool) -> Result<(), AppError> {
+    let guard = DuplicateGuard::new(&config.data_dir, "deploy");
+    guard.acquire(force)?;
+    // ... expensive work happens here ...
+    // guard.release() called automatically via Drop
+    Ok(())
+}
+```
+
+Add `chrono = "0.4"` and `libc = "0.2"` to dependencies if using this pattern. The `Drop` impl ensures cleanup even on early returns or panics.
+
 ### HTTP Retry with Backoff
 
 For CLIs that make network calls:
@@ -826,6 +1124,13 @@ toml = "0.8"                 # For config file mutations
 
 # Paths
 directories = "6"
+
+# Doctor (if checking binaries on PATH)
+which = "7"
+
+# Duplicate guard (if using lock files with timestamps)
+chrono = "0.4"
+libc = "0.2"
 
 # HTTP (if making network calls)
 reqwest = { version = "0.12", features = ["json", "rustls-tls"] }
