@@ -6,13 +6,13 @@
 
 <br />
 
-[![Star this repo](https://img.shields.io/github/stars/199-biotechnologies/agent-cli-framework?style=for-the-badge&logo=github&label=%E2%AD%90%20Star%20this%20repo&color=yellow)](https://github.com/199-biotechnologies/agent-cli-framework/stargazers)
+[![Star this repo](https://img.shields.io/github/stars/paperfoot/agent-cli-framework?style=for-the-badge&logo=github&label=%E2%AD%90%20Star%20this%20repo&color=yellow)](https://github.com/paperfoot/agent-cli-framework/stargazers)
 &nbsp;&nbsp;
 [![Follow @longevityboris](https://img.shields.io/badge/Follow_%40longevityboris-000000?style=for-the-badge&logo=x&logoColor=white)](https://x.com/longevityboris)
 
 <br />
 
-[![CI](https://github.com/199-biotechnologies/agent-cli-framework/actions/workflows/ci.yml/badge.svg)](https://github.com/199-biotechnologies/agent-cli-framework/actions/workflows/ci.yml)
+[![CI](https://github.com/paperfoot/agent-cli-framework/actions/workflows/ci.yml/badge.svg)](https://github.com/paperfoot/agent-cli-framework/actions/workflows/ci.yml)
 [![Rust](https://img.shields.io/badge/Rust-000000?style=for-the-badge&logo=rust&logoColor=white)](https://www.rust-lang.org/)
 [![MSRV 1.85+](https://img.shields.io/badge/MSRV-1.85%2B-orange?style=for-the-badge)](https://www.rust-lang.org/)
 [![MIT License](https://img.shields.io/badge/License-MIT-blue?style=for-the-badge)](LICENSE)
@@ -1034,7 +1034,7 @@ example/
 Build and run:
 
 ```bash
-git clone https://github.com/199-biotechnologies/agent-cli-framework.git
+git clone https://github.com/paperfoot/agent-cli-framework.git
 cd agent-cli-framework/example
 cargo build --release
 
@@ -1151,10 +1151,10 @@ opt-level = 3
 
 | CLI | What it does | Install |
 |-----|-------------|---------|
-| [search-cli](https://github.com/199-biotechnologies/search-cli) | 11 search providers, 14 modes, one binary | `cargo install agent-search` |
-| [autoresearch](https://github.com/199-biotechnologies/autoresearch-cli) | Autonomous experiment loops for any metric | `cargo install autoresearch` |
-| [xmaster](https://github.com/199-biotechnologies/xmaster) | X/Twitter CLI with dual backends | `cargo install xmaster` |
-| [email-cli](https://github.com/199-biotechnologies/email-cli) | Agent-friendly email via Resend API | `cargo install email-cli` |
+| [search-cli](https://github.com/paperfoot/search-cli) | 11 search providers, 14 modes, one binary | `cargo install agent-search` |
+| [autoresearch](https://github.com/paperfoot/autoresearch-cli) | Autonomous experiment loops for any metric | `cargo install autoresearch` |
+| [xmaster](https://github.com/paperfoot/xmaster-cli) | X/Twitter CLI with dual backends | `cargo install xmaster` |
+| [email-cli](https://github.com/paperfoot/email-cli) | Agent-friendly email via Resend API | `cargo install email-cli` |
 
 ---
 
@@ -1183,7 +1183,7 @@ Built by [Boris Djordjevic](https://github.com/longevityboris) at [199 Biotechno
 
 **If this is useful to you:**
 
-[![Star this repo](https://img.shields.io/github/stars/199-biotechnologies/agent-cli-framework?style=for-the-badge&logo=github&label=%E2%AD%90%20Star%20this%20repo&color=yellow)](https://github.com/199-biotechnologies/agent-cli-framework/stargazers)
+[![Star this repo](https://img.shields.io/github/stars/paperfoot/agent-cli-framework?style=for-the-badge&logo=github&label=%E2%AD%90%20Star%20this%20repo&color=yellow)](https://github.com/paperfoot/agent-cli-framework/stargazers)
 &nbsp;&nbsp;
 [![Follow @longevityboris](https://img.shields.io/badge/Follow_%40longevityboris-000000?style=for-the-badge&logo=x&logoColor=white)](https://x.com/longevityboris)
 

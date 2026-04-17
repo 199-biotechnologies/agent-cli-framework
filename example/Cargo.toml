@@ -5,7 +5,7 @@ edition = "2024"
 rust-version = "1.85"
 description = "Minimal agent-friendly CLI example"
 license = "MIT"
-repository = "https://github.com/199-biotechnologies/agent-cli-framework"
+repository = "https://github.com/paperfoot/agent-cli-framework"
 
 [[bin]]
 name = "greeter"
