@@ -22,7 +22,7 @@
 
 Eight patterns turn any Rust CLI into a tool AI agents can pick up and use without documentation, MCP servers, or skill files. The binary describes itself, returns structured output, uses semantic exit codes, teaches usage through rich help, diagnoses its own dependencies, and guards against duplicate runs. Your CLI becomes the tool, the documentation, and the API -- all in one binary.
 
-[Philosophy](#philosophy) | [Why This Exists](#why-this-exists) | [Patterns](#patterns) | [Reusable Modules](#reusable-modules) | [Getting Started](#getting-started-build-your-own) | [Example](#example) | [Invariants](#invariants)
+[Philosophy](#philosophy) | [Why This Exists](#why-this-exists) | [Patterns](#patterns) | [Reusable Modules](#reusable-modules) | [Getting Started](#getting-started-build-your-own) | [Example](#example) | [Invariants](#invariants) | [Conformance](#conformance)
 
 </div>
 
@@ -175,7 +175,7 @@ The binary describes itself. One command returns a JSON manifest of everything t
 }
 ```
 
-This is the canonical manifest shape -- the `example/` binary emits exactly this structure. Commands are objects with `description`, `args`, and `options` schemas; aliases go in an `aliases` array; config metadata nests under `config`. Do not invent alternative shapes: agents that learn this schema from one CLI must be able to parse every other CLI's manifest.
+This is the canonical manifest shape -- the `example/` binary emits exactly this structure, and [`schemas/agent-info.schema.json`](schemas/agent-info.schema.json) defines it precisely. Commands are objects with `description`, `args`, and `options` schemas; aliases go in an `aliases` array; config metadata nests under `config`. Do not invent alternative shapes: agents that learn this schema from one CLI must be able to parse every other CLI's manifest.
 
 `agent-info` always outputs raw JSON (not wrapped in the envelope). It IS the schema definition, not a command that returns data.
 
@@ -1136,6 +1136,20 @@ These are non-negotiable rules. If a CLI violates any of these, it is broken.
 7. **No interactive prompts.** The CLI never reads from stdin, never opens a pager, never asks "are you sure?" Destructive operations take `--confirm` as a flag.
 
 8. **Secrets are never logged or displayed in plain text.** Use `mask_secret()` for any display. Never include raw secrets in error messages, suggestions, or JSON output.
+
+---
+
+## Conformance
+
+The contract is machine-checkable, not just prose. [`schemas/`](schemas/) holds the normative JSON Schemas for the [output envelope](schemas/envelope.schema.json) and the [`agent-info` manifest](schemas/agent-info.schema.json). [`conformance/conformance.sh`](conformance/conformance.sh) probes a built binary against the behavioral contract (bash + jq, nothing else):
+
+```bash
+conformance/conformance.sh ./target/release/mycli
+```
+
+It verifies the manifest shape, that every listed command is routable, that `--help`/`--version` exit 0 and piped help is wrapped in the envelope, that unknown commands exit 3 with a JSON error envelope on stderr and nothing on stdout, and the 0-4 exit-code contract via the hidden `contract` hook when present. CI runs it against the example on every push.
+
+**If you are building a CLI from this framework: your binary must pass this script before you ship.** Wire it into your own CI. A CLI that fails conformance is not "mostly compatible" -- it breaks the promise that an agent who learned one framework CLI has learned them all.
 
 ---
 

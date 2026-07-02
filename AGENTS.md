@@ -255,6 +255,20 @@ Release archives, checksums, Homebrew formulae, cargo-binstall-compatible
 artifacts, and optional GitHub artifact attestations. See
 `docs/update-standard.md` for the full policy and required tests.
 
+## Conformance
+
+Your built binary MUST pass the framework conformance probe before you ship:
+
+```bash
+<path-to-this-repo>/conformance/conformance.sh ./target/release/<your-cli>
+```
+
+It checks the agent-info manifest shape, command routability, help/version
+behavior, stderr discipline, and the exit-code contract. The JSON Schemas in
+`schemas/` (envelope.schema.json, agent-info.schema.json) are the precise
+shape definitions -- validate against them when in doubt. Wire the script
+into your CI the way this repo's `.github/workflows/ci.yml` does.
+
 ## Reference
 
-See the `example/` directory in this repo for a working implementation of the core patterns and the entry point, error type, and output helpers. Config loading, secret handling, XDG paths, doctor, duplicate guard, and HTTP retry are documented as code patterns in the README's Reusable Modules section.
+See the `example/` directory in this repo for a working implementation of all eight patterns, including the entry point, error type, output helpers, guard, and doctor. Everything marked `REPLACE` in the example source is placeholder content -- replace it, keep the structure and contracts. Secret handling, XDG paths, and HTTP retry are documented as code patterns in the README's Reusable Modules section.

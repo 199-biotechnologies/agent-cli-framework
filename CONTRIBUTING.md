@@ -26,7 +26,9 @@ README.md              # Full framework documentation: philosophy, patterns, reu
 AGENTS.md              # Condensed build instructions for AI coding agents
 CONTRIBUTING.md        # This file
 docs/                  # Standards (update-standard.md)
-.github/workflows/     # CI: builds and tests on macOS + Linux
+schemas/               # Normative JSON Schemas: envelope, agent-info manifest
+conformance/           # conformance.sh -- behavioral probe for any built binary
+.github/workflows/     # CI: builds, tests, and runs conformance on macOS + Linux
 example/
   src/
     main.rs            # Entry point: parse, detect format, dispatch, exit

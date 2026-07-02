@@ -40,3 +40,7 @@ jobs:
       - name: Test
         working-directory: example
         run: cargo test --locked
+
+      - name: Conformance
+        working-directory: example
+        run: ../conformance/conformance.sh target/debug/greeter

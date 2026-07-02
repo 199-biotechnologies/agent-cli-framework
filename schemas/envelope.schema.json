@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/paperfoot/agent-cli-framework/main/schemas/envelope.schema.json",
+  "title": "Agent CLI Framework output envelope",
+  "description": "Every JSON payload a framework CLI writes to stdout or stderr must validate against this schema. The one exception is agent-info, which emits the raw manifest (see agent-info.schema.json).",
+  "oneOf": [
+    { "$ref": "#/$defs/success" },
+    { "$ref": "#/$defs/error" }
+  ],
+  "$defs": {
+    "success": {
+      "type": "object",
+      "required": ["version", "status", "data"],
+      "properties": {
+        "version": { "const": "1" },
+        "status": {
+          "enum": ["success", "partial_success", "all_failed", "no_results"]
+        },
+        "data": {
+          "description": "Command-specific payload. Object or array; never raw text."
+        }
+      },
+      "additionalProperties": false
+    },
+    "error": {
+      "type": "object",
+      "required": ["version", "status", "error"],
+      "properties": {
+        "version": { "const": "1" },
+        "status": { "const": "error" },
+        "error": {
+          "type": "object",
+          "required": ["code", "message", "suggestion"],
+          "properties": {
+            "code": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_]*$",
+              "description": "Machine-readable error code, e.g. invalid_input, config_error"
+            },
+            "message": { "type": "string", "minLength": 1 },
+            "suggestion": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Tested recovery instruction an agent can follow literally"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}
