@@ -5,6 +5,9 @@
 
 use assert_cmd::Command;
 
+mod common;
+use common::greeter_in;
+
 fn greeter() -> Command {
     Command::cargo_bin("greeter").unwrap()
 }
@@ -60,12 +63,20 @@ fn agent_info_exits_0() {
 
 #[test]
 fn config_path_exits_0() {
-    greeter().args(["config", "path"]).assert().code(0);
+    let tmp = tempfile::tempdir().unwrap();
+    greeter_in(tmp.path())
+        .args(["config", "path"])
+        .assert()
+        .code(0);
 }
 
 #[test]
 fn config_show_exits_0() {
-    greeter().args(["config", "show"]).assert().code(0);
+    let tmp = tempfile::tempdir().unwrap();
+    greeter_in(tmp.path())
+        .args(["config", "show"])
+        .assert()
+        .code(0);
 }
 
 #[test]

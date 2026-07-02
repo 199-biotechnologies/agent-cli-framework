@@ -5,6 +5,9 @@
 
 use assert_cmd::Command;
 
+mod common;
+use common::greeter_in;
+
 fn greeter() -> Command {
     Command::cargo_bin("greeter").unwrap()
 }
@@ -70,8 +73,7 @@ fn agent_info_alias_is_routable() {
 fn skill_install_is_routable() {
     // Run against a temp HOME so we don't mutate the real user's skill dirs.
     let tmp = tempfile::tempdir().unwrap();
-    greeter()
-        .env("HOME", tmp.path())
+    greeter_in(tmp.path())
         .args(["skill", "install"])
         .assert()
         .code(0);
@@ -95,11 +97,7 @@ fn config_path_is_routable() {
 #[test]
 fn doctor_is_routable() {
     let tmp = tempfile::tempdir().unwrap();
-    greeter()
-        .env("HOME", tmp.path())
-        .arg("doctor")
-        .assert()
-        .code(0);
+    greeter_in(tmp.path()).arg("doctor").assert().code(0);
 }
 
 // ── Enriched schema ────────────────────────────────────────────────────────

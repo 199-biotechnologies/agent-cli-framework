@@ -4,37 +4,19 @@
 //! not hit the network or mutate the machine running the tests.
 
 use assert_cmd::Command;
-use std::path::{Path, PathBuf};
+
+mod common;
+use common::{greeter_in, write_config_in};
 
 fn greeter() -> Command {
     Command::cargo_bin("greeter").unwrap()
 }
 
-fn config_path_for_home(home: &Path) -> PathBuf {
-    let out = greeter()
-        .env("HOME", home)
-        .args(["--json", "config", "path"])
-        .output()
-        .unwrap();
-    assert!(out.status.success());
-
-    let json: serde_json::Value =
-        serde_json::from_slice(&out.stdout).expect("config path should be JSON");
-    PathBuf::from(json["data"]["path"].as_str().unwrap())
-}
-
-fn write_config(home: &Path, contents: &str) {
-    let path = config_path_for_home(home);
-    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
-    std::fs::write(path, contents).unwrap();
-}
-
 fn update_check_with_config(config: &str) -> serde_json::Value {
     let tmp = tempfile::tempdir().unwrap();
-    write_config(tmp.path(), config);
+    write_config_in(tmp.path(), config);
 
-    let out = greeter()
-        .env("HOME", tmp.path())
+    let out = greeter_in(tmp.path())
         .args(["--json", "update", "--check"])
         .output()
         .unwrap();
@@ -133,7 +115,7 @@ crate_name = "greeter"
 #[test]
 fn invalid_update_source_exits_2() {
     let tmp = tempfile::tempdir().unwrap();
-    write_config(
+    write_config_in(
         tmp.path(),
         r#"
 [update]
@@ -141,8 +123,7 @@ install_source = "spaceship"
 "#,
     );
 
-    let out = greeter()
-        .env("HOME", tmp.path())
+    let out = greeter_in(tmp.path())
         .args(["--json", "update", "--check"])
         .output()
         .unwrap();
