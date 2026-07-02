@@ -36,7 +36,7 @@ impl std::fmt::Display for Style {
 
 #[derive(Subcommand)]
 pub enum Commands {
-    /// Greet someone (the actual domain command)
+    /// Greet someone (REPLACE: placeholder domain command)
     Hello {
         /// Name to greet
         name: String,

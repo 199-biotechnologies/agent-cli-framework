@@ -1,3 +1,7 @@
+//! REPLACE: placeholder domain command. Delete this file and add your own
+//! command modules; keep the shape (take `Ctx`, return `Result<(), AppError>`,
+//! emit through `print_success_or`).
+
 use serde::Serialize;
 
 use crate::cli::Style;

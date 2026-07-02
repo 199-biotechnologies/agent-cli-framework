@@ -58,11 +58,12 @@ impl Default for UpdateConfig {
         Self {
             enabled: true,
             install_source: "auto".into(),
-            owner: "199-biotechnologies".into(),
-            repo: "agent-cli-framework".into(),
+            // REPLACE: the GitHub org/repo that publishes YOUR releases.
+            owner: "your-org".into(),
+            repo: "your-repo".into(),
             crate_name: env!("CARGO_PKG_NAME").into(),
             formula: env!("CARGO_PKG_NAME").into(),
-            tap: "199-biotechnologies/tap".into(),
+            tap: "your-org/tap".into(),
         }
     }
 }

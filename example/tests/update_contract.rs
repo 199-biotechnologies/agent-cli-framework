@@ -66,7 +66,7 @@ fn homebrew_update_returns_brew_upgrade_command() {
 [update]
 install_source = "homebrew"
 formula = "greeter"
-tap = "199-biotechnologies/tap"
+tap = "your-org/tap"
 "#,
     );
 
@@ -75,7 +75,7 @@ tap = "199-biotechnologies/tap"
     assert_eq!(json["data"]["update_mode"], "package_manager");
     assert_eq!(
         json["data"]["upgrade_command"],
-        "brew upgrade 199-biotechnologies/tap/greeter"
+        "brew upgrade your-org/tap/greeter"
     );
 }
 

@@ -6,6 +6,9 @@ use crate::output::{self, Ctx};
 
 // ── Skill content ───────────────────────────────────────────────────────────
 // Built from the binary name. No hardcoded app name.
+// REPLACE: rewrite the description and body for your domain. Keep the skill a
+// signpost (a few lines + trigger phrases); all capability detail lives in
+// `agent-info`, so the skill never drifts from the binary.
 
 fn skill_content() -> String {
     let name = env!("CARGO_PKG_NAME");
