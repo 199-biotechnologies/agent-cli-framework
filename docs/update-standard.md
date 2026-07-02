@@ -310,12 +310,18 @@ install_source = "auto"
 owner = "your-org"
 repo = "your-repo"
 crate_name = "your-cli"
-brew_formula = "your-cli"
-brew_tap = "your-org/tap"
+formula = "your-cli"
+tap = "your-org/tap"
+
+# Standalone-channel policy -- implement these when you ship a standalone
+# installer that self-replaces:
 allow_prerelease = false
 require_checksum = true
 require_attestation = false
 ```
+
+Key names match the `example/` config struct (`formula`, `tap`) -- do not
+invent variants like `brew_formula`.
 
 For enterprise or managed environments:
 

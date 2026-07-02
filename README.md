@@ -28,6 +28,10 @@ Eight patterns turn any Rust CLI into a tool AI agents can pick up and use witho
 
 ---
 
+> **AI coding agents:** follow [AGENTS.md](AGENTS.md) -- the condensed, normative build spec -- and copy `example/` as your scaffold. This README is the long-form tour; where wording differs, AGENTS.md and the example code win.
+
+---
+
 ## Philosophy
 
 These principles govern every CLI built with this framework. They are not suggestions. When an agent or developer faces a decision not covered by a specific pattern, reason from these principles.
@@ -114,6 +118,8 @@ LLMs already know how to use CLIs. They were trained on millions of shell exampl
 
 ## Patterns
 
+Patterns 1-6 are required in every CLI. Pattern 7 (doctor) is required when the CLI depends on anything external (API keys, binaries, endpoints). Pattern 8 (duplicate guard) is required when a command is expensive or irreversible. When in doubt, implement all eight -- the example does.
+
 ### Pattern 1: `agent-info` -- Capability Discovery
 
 The binary describes itself. One command returns a JSON manifest of everything the tool can do.
@@ -124,16 +130,30 @@ The binary describes itself. One command returns a JSON manifest of everything t
   "version": "1.2.0",
   "description": "What this CLI does in one sentence",
   "commands": {
-    "search <query>": "Search for items. Modes: web, academic, news.",
-    "config show": "Display current configuration.",
-    "config set <key> <value>": "Set a configuration value.",
-    "agent-info | info": "This manifest.",
-    "skill install": "Install skill file to agent platforms.",
-    "update [--check]": "Distribution-aware update check/apply."
+    "search": {
+      "description": "Search for items",
+      "args": [
+        { "name": "query", "kind": "positional", "type": "string", "required": true, "description": "Search query" }
+      ],
+      "options": [
+        { "name": "--mode", "type": "string", "required": false, "default": "web", "values": ["web", "academic", "news"], "description": "Search mode" }
+      ]
+    },
+    "agent-info": { "description": "This manifest", "aliases": ["info"], "args": [], "options": [] },
+    "config show": { "description": "Display current configuration", "args": [], "options": [] },
+    "skill install": { "description": "Install skill file to agent platforms", "args": [], "options": [] },
+    "doctor": { "description": "Check dependencies and configuration health", "args": [], "options": [] },
+    "update": {
+      "description": "Distribution-aware update check/apply",
+      "args": [],
+      "options": [
+        { "name": "--check", "type": "bool", "required": false, "default": false, "description": "Check only, don't install" }
+      ]
+    }
   },
-  "flags": {
-    "--json": "Force JSON output (auto-enabled when piped)",
-    "--quiet": "Suppress non-essential output"
+  "global_flags": {
+    "--json": { "description": "Force JSON output (auto-enabled when piped)", "type": "bool", "default": false },
+    "--quiet": { "description": "Suppress informational output", "type": "bool", "default": false }
   },
   "exit_codes": {
     "0": "Success",
@@ -147,11 +167,15 @@ The binary describes itself. One command returns a JSON manifest of everything t
     "success": "{ version, status, data }",
     "error": "{ version, status, error: { code, message, suggestion } }"
   },
-  "config_path": "~/.config/mycli/config.toml",
-  "auto_json_when_piped": true,
-  "env_prefix": "MYCLI_"
+  "config": {
+    "path": "~/.config/mycli/config.toml",
+    "env_prefix": "MYCLI_"
+  },
+  "auto_json_when_piped": true
 }
 ```
+
+This is the canonical manifest shape -- the `example/` binary emits exactly this structure. Commands are objects with `description`, `args`, and `options` schemas; aliases go in an `aliases` array; config metadata nests under `config`. Do not invent alternative shapes: agents that learn this schema from one CLI must be able to parse every other CLI's manifest.
 
 `agent-info` always outputs raw JSON (not wrapped in the envelope). It IS the schema definition, not a command that returns data.
 
@@ -211,6 +235,32 @@ The binary carries a minimal SKILL.md as an embedded constant (via `const` or `i
 ```
 
 The skill is a signpost -- a few lines saying "this tool exists, run `agent-info` for everything else." All workflow knowledge lives in the binary. Binary update = skill update. No drift.
+
+### Pattern 5: Update
+
+One command, distribution-aware update paths:
+
+```bash
+# Install (pick any):
+brew tap your-org/tap && brew install your-cli
+cargo install your-cli
+curl -fsSL https://your-cli.dev/install.sh | sh
+
+# Agent-facing update command:
+your-cli update --check      # safe check, no mutation
+your-cli update              # update via the owning channel, or return exact instructions
+your-cli skill install       # re-deploy updated skill
+```
+
+Rules:
+
+- Standalone installer install: may self-replace from GitHub Releases after asset selection, checksum/provenance verification, temp-file staging, version check, and atomic replacement.
+- Homebrew install: never self-replace; use `brew upgrade <formula>`.
+- Cargo install: never self-replace; use `cargo install --locked --force <crate>` or `cargo binstall --no-confirm <crate>` when supported.
+- npm, Bun package-manager, uv tool, pipx, winget, scoop, apt, and enterprise installs: defer to the owning package manager.
+- Managed environment: support `update.enabled = false` and return `status: "disabled"` with the internal upgrade instruction.
+
+`update --check --json` returns a normal success envelope whose `data` includes `current_version`, `latest_version`, `status`, `install_source`, `update_mode`, `upgrade_command`, `release_url`, and `requires_skill_reinstall`. See [docs/update-standard.md](docs/update-standard.md) for the full standard, release pipeline, and required tests.
 
 ### Pattern 6: Rich Help with Tips and Examples
 
@@ -276,7 +326,7 @@ Returns structured pass/warn/fail checks:
 }
 ```
 
-Exit code: `0` if all checks pass, `2` (config error) if any fail. Agents use this to self-diagnose before retrying.
+Exit code: `0` when no check fails (warnings allowed), `2` (config error) when any check fails. Agents use this to self-diagnose before retrying.
 
 ### Pattern 8: Duplicate Guard
 
@@ -289,32 +339,6 @@ mycli deploy                  # Creates lock, runs deploy
 mycli deploy                  # "Operation already running. Use --force to override." (exit 3)
 mycli deploy --force          # Bypasses guard
 ```
-
-### Pattern 5: Update
-
-One command, distribution-aware update paths:
-
-```bash
-# Install (pick any):
-brew tap your-org/tap && brew install your-cli
-cargo install your-cli
-curl -fsSL https://your-cli.dev/install.sh | sh
-
-# Agent-facing update command:
-your-cli update --check      # safe check, no mutation
-your-cli update              # update via the owning channel, or return exact instructions
-your-cli skill install       # re-deploy updated skill
-```
-
-Rules:
-
-- Standalone installer install: may self-replace from GitHub Releases after asset selection, checksum/provenance verification, temp-file staging, version check, and atomic replacement.
-- Homebrew install: never self-replace; use `brew upgrade <formula>`.
-- Cargo install: never self-replace; use `cargo install --locked --force <crate>` or `cargo binstall --no-confirm <crate>` when supported.
-- npm, Bun package-manager, uv tool, pipx, winget, scoop, apt, and enterprise installs: defer to the owning package manager.
-- Managed environment: support `update.enabled = false` and return `status: "disabled"` with the internal upgrade instruction.
-
-`update --check --json` returns a normal success envelope whose `data` includes `current_version`, `latest_version`, `status`, `install_source`, `update_mode`, `upgrade_command`, `release_url`, and `requires_skill_reinstall`. See [docs/update-standard.md](docs/update-standard.md) for the full standard, release pipeline, and required tests.
 
 ---
 
@@ -698,7 +722,7 @@ Agents learn patterns from one subcommand group and apply them everywhere. Two r
 
 **2. Be consistent across subcommand groups.** If `inbox list` works, `account list` must also work. Same names, same aliases, same argument patterns.
 
-Document aliases in `agent-info` using `"list | ls"` format so agents discover both forms.
+Document aliases in `agent-info` with an `aliases` array on the command entry (see Pattern 1) so agents discover both forms.
 
 ### Doctor Command
 
@@ -788,8 +812,8 @@ pub fn check_config_file(path: &std::path::Path) -> DoctorCheck {
         DoctorCheck {
             name: "config_file",
             status: CheckStatus::Warn,
-            message: format!("{} not found (using defaults)", path.display()),
-            suggestion: Some(format!("Create config: mycli config show > {}", path.display())),
+            message: format!("{} not found (defaults work without it)", path.display()),
+            suggestion: None,
         }
     }
 }
@@ -821,11 +845,11 @@ pub fn run_doctor(ctx: Ctx, config: &Config) -> Result<(), AppError> {
                 CheckStatus::Warn => "!",
                 CheckStatus::Fail => "✗",
             };
-            eprintln!("  {icon} {}: {}", check.name, check.message);
+            println!("  {icon} {}: {}", check.name, check.message);
         }
     });
     if has_failures {
-        return Err(AppError::Config("Doctor found issues. Run with --json for details.".into()));
+        return Err(AppError::Config("doctor found failing checks (see report)".into()));
     }
     Ok(())
 }
@@ -846,7 +870,7 @@ struct LockFile {
     operation: String,
 }
 
-const STALE_THRESHOLD_SECS: u64 = 3600; // 1 hour
+const STALE_THRESHOLD_SECS: i64 = 3600; // 1 hour
 
 pub struct DuplicateGuard {
     lock_path: PathBuf,
@@ -867,12 +891,13 @@ impl DuplicateGuard {
             if let Ok(lock) = serde_json::from_str::<LockFile>(&contents) {
                 // Check if the process is still alive
                 let pid_alive = unsafe { libc::kill(lock.pid as i32, 0) == 0 };
-                let is_stale = chrono::Utc::now()
-                    .signed_duration_since(
-                        chrono::DateTime::parse_from_rfc3339(&lock.started_at)
-                            .unwrap_or_default()
-                    )
-                    .num_seconds() > STALE_THRESHOLD_SECS as i64;
+                // Unparseable timestamps count as stale.
+                let is_stale = chrono::DateTime::parse_from_rfc3339(&lock.started_at)
+                    .map(|t| {
+                        chrono::Utc::now().signed_duration_since(t).num_seconds()
+                            > STALE_THRESHOLD_SECS
+                    })
+                    .unwrap_or(true);
 
                 if pid_alive && !is_stale && !force {
                     return Err(AppError::InvalidInput(format!(
@@ -889,7 +914,9 @@ impl DuplicateGuard {
             operation: self.lock_path.file_stem()
                 .unwrap_or_default().to_string_lossy().into(),
         };
-        std::fs::write(&self.lock_path, serde_json::to_string(&lock).unwrap())?;
+        let contents =
+            serde_json::to_string(&lock).map_err(|e| AppError::Transient(e.to_string()))?;
+        std::fs::write(&self.lock_path, contents)?;
         Ok(())
     }
 
@@ -976,14 +1003,16 @@ Update the `[[bin]]` section and the `#[command(name = "...")]` in `cli.rs`.
 ```
 src/
   main.rs           # Entry point (barely changes between CLIs)
-  cli.rs            # clap derive definitions
+  cli.rs            # clap derive definitions + help footer (rewrite Tips/Examples)
   config.rs         # 3-tier config loading
   error.rs          # AppError with exit_code(), error_code(), suggestion()
   output.rs         # Format detection + envelope helpers
+  guard.rs          # Duplicate guard (works out of the box)
   commands/
     mod.rs
     agent_info.rs   # Update: list YOUR commands
     your_command.rs  # Your domain logic
+    doctor.rs       # Update: check YOUR dependencies
     skill.rs        # Skill content auto-derived from CARGO_PKG_NAME
     config.rs       # config show/path (works out of the box)
     update.rs       # Distribution-aware update (set owner/repo/crate/brew names)
@@ -1013,28 +1042,34 @@ The framework conventions (`env!("CARGO_PKG_NAME")`, config loading, skill insta
 
 ## Example
 
-The `example/` directory contains a modular `greeter` CLI demonstrating all core patterns: agent-info with argument schemas, JSON envelope, semantic exit codes (0-4), `--json` pre-scan, `--quiet` flag, config loading via Figment, skill self-install, and distribution-aware update output. It includes integration tests that verify the contracts.
+The `example/` directory contains a modular `greeter` CLI demonstrating all eight patterns: agent-info with argument schemas, JSON envelope, semantic exit codes (0-4), `--json` pre-scan, `--quiet` flag, config loading via Figment, skill self-install, distribution-aware update output, rich help (Tips + Examples), doctor diagnostics, and a duplicate guard on the update path. Integration tests verify every contract.
+
+The example is a scaffold, not a product. Everything marked `REPLACE` in the source (the `hello` command, the skill text, the update owner/repo, the help footer) is placeholder content. Copy the structure, replace the placeholders, keep the contracts.
 
 ```
 example/
   src/
     main.rs           # Entry point -- pre-scan --json, parse, dispatch, exit
-    cli.rs            # Clap definitions: Cli, Commands, Style (ValueEnum)
+    cli.rs            # Clap definitions + rich help footer (Tips, Examples)
     config.rs         # 3-tier config loading (defaults -> TOML -> env vars)
     error.rs          # AppError with exit_code(), error_code(), suggestion()
     output.rs         # Format detection, Ctx struct, envelope helpers
+    guard.rs          # Duplicate guard (lock file, PID + staleness)
     commands/
       mod.rs          # Command router
-      hello.rs        # Domain command (the actual feature)
+      hello.rs        # Domain command (REPLACE: placeholder)
       agent_info.rs   # Enriched capability manifest with arg schemas
       config.rs       # config show / config path
+      doctor.rs       # Dependency diagnostics (pass/warn/fail)
       skill.rs        # Skill install + status
       update.rs       # Distribution-aware update
       contract.rs     # Hidden: deterministic exit-code trigger for tests
   tests/
     exit_code_contracts.rs    # All 5 exit codes verified
-    output_contracts.rs       # JSON envelope shape, quiet flag, help wrapping
+    output_contracts.rs       # JSON envelope shape, quiet flag, rich help
     agent_info_contract.rs    # Manifest fields, routable commands, arg schemas
+    doctor_contract.rs        # Doctor pass/fail exit contract
+    update_contract.rs        # Distribution-aware update channels
     robustness.rs             # Malformed config resilience, edge cases
   Cargo.toml
 ```
@@ -1054,6 +1089,9 @@ cargo build --release
 
 # Capability discovery
 ./target/release/greeter agent-info
+
+# Dependency diagnostics
+./target/release/greeter doctor
 
 # Semantic exit code on error
 ./target/release/greeter hello ""

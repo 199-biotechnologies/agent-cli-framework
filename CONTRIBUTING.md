@@ -6,7 +6,7 @@ Thanks for your interest in contributing.
 
 1. Fork the repo and create a branch from `main`.
 2. Make your changes. Keep them focused -- one concern per PR.
-3. If you add a pattern, include it in both the README and the `example/` CLI.
+3. If you add a pattern, include it in the README, AGENTS.md, and the `example/` CLI -- all three must stay in lockstep.
 4. Run the full test suite:
    ```bash
    cd example && cargo test --locked
@@ -25,26 +25,32 @@ Thanks for your interest in contributing.
 README.md              # Full framework documentation: philosophy, patterns, reusable modules
 AGENTS.md              # Condensed build instructions for AI coding agents
 CONTRIBUTING.md        # This file
+docs/                  # Standards (update-standard.md)
 .github/workflows/     # CI: builds and tests on macOS + Linux
 example/
   src/
     main.rs            # Entry point: parse, detect format, dispatch, exit
-    cli.rs             # Clap derive definitions (--json, --quiet, all commands)
+    cli.rs             # Clap derive definitions + rich help footer
     config.rs          # Config loading via figment (defaults -> TOML -> env vars)
     error.rs           # Error enum with exit_code(), error_code(), suggestion()
     output.rs          # Format detection, Ctx struct, JSON envelope helpers
+    guard.rs           # Duplicate guard (lock file, PID + staleness)
     commands/
       mod.rs           # Re-exports
-      hello.rs         # Domain command example
+      hello.rs         # Domain command example (placeholder)
       agent_info.rs    # Enriched capability manifest with arg schemas
       config.rs        # config show/path
       contract.rs      # Hidden deterministic exit-code trigger for tests
+      doctor.rs        # Dependency diagnostics
       skill.rs         # Skill install + status (uses CARGO_PKG_NAME)
-      update.rs        # Self-update (repo configurable via config)
+      update.rs        # Distribution-aware update (repo configurable via config)
   tests/
     exit_code_contracts.rs   # All 5 exit codes verified
-    output_contracts.rs      # JSON envelope shape, quiet flag, help wrapping
+    output_contracts.rs      # JSON envelope shape, quiet flag, rich help
     agent_info_contract.rs   # Manifest fields, routable commands, arg schemas
+    doctor_contract.rs       # Doctor pass/fail exit contract
+    update_contract.rs       # Distribution-aware update channels
+    robustness.rs            # Malformed config resilience, edge cases
   Cargo.toml
 ```
 
@@ -58,7 +64,7 @@ example/
 
 ## Guidelines
 
-- The example demonstrates the core patterns plus the entry point, error type, and output helpers. Reusable modules like config loading, secret handling, doctor, duplicate guard, and HTTP retry are documented as code patterns in the README -- they don't need to be in the example.
+- The example implements all eight patterns and is the scaffold agents copy. Helper modules with no pattern of their own (secret handling, HTTP retry) live as code snippets in the README's Reusable Modules section.
 - Keep the example minimal -- it demonstrates patterns, not a real product.
 - Ensure the README, AGENTS.md, and example stay consistent with each other.
 - All new patterns must have corresponding integration tests.

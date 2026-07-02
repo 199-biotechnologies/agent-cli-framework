@@ -13,20 +13,21 @@ Split your CLI into focused modules. Never write a monolithic main.rs.
 ```
 src/
   main.rs         # Entry point only: parse, detect format, dispatch, exit
-  cli.rs          # Clap derive: Cli struct + Commands enum + Args structs
+  cli.rs          # Clap derive: Cli struct + Commands enum + help footer
   config.rs       # AppConfig + load() via figment (3-tier precedence)
   error.rs        # Error enum with exit_code(), error_code(), suggestion()
   output.rs       # Format enum, Ctx struct, print_success_or(), print_error()
+  guard.rs        # Duplicate guard (when any command is expensive/irreversible)
   commands/
     mod.rs        # Re-exports
     <command>.rs  # One file per domain command
     agent_info.rs # Capability manifest with arg schemas (always present)
     skill.rs      # Skill install + status (always present)
     config.rs     # config show/path (always present)
-    doctor.rs     # Dependency diagnostics (optional, recommended)
-    update.rs     # Distribution-aware update (optional)
-  tests/          # Integration tests verifying contracts
-  Cargo.toml
+    doctor.rs     # Dependency diagnostics (required when the CLI has external deps)
+    update.rs     # Distribution-aware update (required when distributed)
+tests/            # Integration tests verifying contracts (crate root, not src/)
+Cargo.toml
 ```
 
 ## Non-Negotiable Rules
@@ -122,11 +123,10 @@ fn main() {
         }
     };
     let ctx = Ctx::new(cli.json, cli.quiet);
-    let config = config::load().unwrap_or_else(|e| {
-        print_error(ctx.format, &e);
-        std::process::exit(e.exit_code());
-    });
-    if let Err(e) = run(cli, ctx, &config) {
+    // Load config lazily -- only inside commands that need it. agent-info,
+    // config path, skill, and pure domain commands must keep working even
+    // when config.toml is malformed.
+    if let Err(e) = run(cli, ctx) {
         print_error(ctx.format, &e);
         std::process::exit(e.exit_code());
     }
@@ -169,9 +169,15 @@ Standard:
 - `config show` -- display effective merged config (secrets masked)
 - `config path` -- print config file path
 
-Optional:
-- `doctor` -- check external dependencies (API keys, binaries, endpoints). Returns structured pass/warn/fail. Exit 0 if all pass, exit 2 if any fail.
-- `update [--check]` -- distribution-aware update check/apply
+Required when applicable:
+- `doctor` -- required when the CLI has external dependencies (API keys, binaries, endpoints). Returns structured pass/warn/fail checks. Exit 0 when no check fails (warnings allowed), exit 2 when any check fails.
+- `update [--check]` -- required when the CLI is distributed; distribution-aware update check/apply
+
+The `agent-info` manifest uses ONE canonical shape (defined by the `example/`
+binary): `commands` is an object of command objects with `description`,
+`args`, and `options` schemas; aliases go in an `aliases` array; global flags
+under `global_flags`; config metadata nests under `config` with `path` and
+`env_prefix`. Do not invent alternative shapes.
 
 ## Rich Help
 
@@ -194,6 +200,9 @@ comfy-table = "7"
 owo-colors = "4"
 directories = "6"
 figment = { version = "0.10", features = ["toml", "env"] }
+which = "8"     # doctor: binary-on-PATH checks
+chrono = "0.4"  # duplicate guard: lock timestamps
+libc = "0.2"    # duplicate guard: PID liveness
 
 [profile.release]
 lto = true
@@ -207,10 +216,10 @@ opt-level = 3
 For commands that do expensive or irreversible work (API calls, long computations, deployments), prevent accidental duplicate runs. Use a lock file in the state directory. The pattern:
 
 1. Before starting: check for `~/.local/share/<app>/locks/<operation>.lock`
-2. If lock exists and is fresh (< 1 hour): exit 3 with suggestion "Operation already running. Use --force to override."
-3. If lock exists but stale (> 1 hour): warn and continue
+2. If lock exists, its PID is alive, and it is fresh (< 1 hour): exit 3 with suggestion "Operation already running. Use --force to override."
+3. If the lock's PID is dead, the lock is stale (> 1 hour), or the timestamp is unparseable: overwrite and continue
 4. Create lock file with PID + timestamp
-5. Remove lock on completion (success or failure)
+5. Remove lock on completion (success or failure) -- use a Drop impl so early returns and panics still clean up
 6. `--force` flag bypasses the guard
 
 Lock file format: `{"pid": 12345, "started_at": "2026-04-12T10:00:00Z", "operation": "deploy"}`
