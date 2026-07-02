@@ -229,12 +229,26 @@ See [Philosophy #5](#5-exit-codes-are-contracts). Every command, every code path
 The binary carries a minimal SKILL.md as an embedded constant (via `const` or `include_str!`). One command writes it to agent platform directories:
 
 ```
-~/.claude/skills/<name>/SKILL.md
-~/.codex/skills/<name>/SKILL.md
-~/.gemini/skills/<name>/SKILL.md
+~/.claude/skills/<name>/SKILL.md     # Claude Code
+~/.codex/skills/<name>/SKILL.md      # Codex CLI
+~/.gemini/skills/<name>/SKILL.md     # Gemini CLI
 ```
 
+All three platforms follow the [Agent Skills](https://agentskills.io) open standard. Its frontmatter rules are validation requirements, not suggestions: `name` is lowercase letters, numbers, and hyphens only, max 64 characters, and must match the directory name; `description` is non-empty, max 1024 characters. The standard also defines `~/.agents/skills/` as a cross-tool alias (Gemini CLI already reads it, with precedence over its own directory) -- as more tools converge on it, prefer one copy there over per-tool copies.
+
 The skill is a signpost -- a few lines saying "this tool exists, run `agent-info` for everything else." All workflow knowledge lives in the binary. Binary update = skill update. No drift.
+
+**The `description` field is the whole game.** It is the only text loaded into every agent session, so it both decides whether the tool triggers and imposes a permanent context cost. Write it as: what the tool does (concrete verbs), the trigger phrases users actually say, then the `agent-info` pointer. Keep the skill body under ~10 lines -- if you are tempted to document a workflow in the skill, put it in `agent-info` or `--help` instead, where it costs context only when used.
+
+```yaml
+---
+name: mycli
+description: >
+  Search the web, news, and academic sources from the terminal. Use when
+  the user asks to "search for", "look up", or "find papers on" something.
+  Run `mycli agent-info` for all commands, flags, and exit codes.
+---
+```
 
 ### Pattern 5: Update
 
@@ -819,7 +833,7 @@ pub fn check_config_file(path: &std::path::Path) -> DoctorCheck {
 }
 ```
 
-Add `which = "7"` to dependencies if checking binaries on PATH. Compose checks in your doctor command:
+Add `which = "8"` to dependencies if checking binaries on PATH. Compose checks in your doctor command:
 
 ```rust
 pub fn run_doctor(ctx: Ctx, config: &Config) -> Result<(), AppError> {
@@ -1166,23 +1180,23 @@ anyhow = "1"                 # For internal/unexpected errors
 
 # Config
 figment = { version = "0.10", features = ["toml", "env"] }
-toml = "0.8"                 # For config file mutations
+toml = "1"                   # For config file mutations
 
 # Paths
 directories = "6"
 
 # Doctor (if checking binaries on PATH)
-which = "7"
+which = "8"
 
 # Duplicate guard (if using lock files with timestamps)
 chrono = "0.4"
 libc = "0.2"
 
 # HTTP (if making network calls)
-reqwest = { version = "0.12", features = ["json", "rustls-tls"] }
+reqwest = { version = "0.13", features = ["json", "rustls-tls"] }
 
 # Update (optional standalone self-replace)
-self_update = { version = "0.42", features = ["archive-tar", "compression-flate2"] }
+self_update = { version = "0.44", features = ["archive-tar", "compression-flate2"] }
 
 [profile.release]
 lto = true
