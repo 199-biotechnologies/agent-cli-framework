@@ -1,7 +1,32 @@
 use clap::{Parser, Subcommand, ValueEnum};
 
+// REPLACE: rewrite Tips and Examples for your domain. Agents read --help to
+// bootstrap usage; keep 3-8 tips and 3-5 real, copy-pasteable examples.
+const HELP_FOOTER: &str = "\
+Tips:
+  • Run `greeter agent-info | jq` for the full machine-readable manifest
+  • Piped output is always a JSON envelope: `greeter hello Ada | jq '.data'`
+  • Run `greeter doctor` before first use to verify dependencies
+  • Config precedence: defaults < ~/.config/greeter/config.toml < GREETER_* env vars
+  • --quiet suppresses human output; JSON always emits
+
+Examples:
+  greeter hello Ada --style pirate
+    Greet Ada like a pirate
+
+  greeter hello Ada | jq -r '.data.message'
+    Extract just the greeting text as plain text
+
+  greeter update --check
+    Safe update check (no mutation), reports the owning install channel";
+
 #[derive(Parser)]
-#[command(name = "greeter", version, about = "Minimal agent-friendly CLI")]
+#[command(
+    name = "greeter",
+    version,
+    about = "Minimal agent-friendly CLI",
+    after_long_help = HELP_FOOTER
+)]
 pub struct Cli {
     /// Force JSON output even in a terminal
     #[arg(long, global = true)]
@@ -57,11 +82,16 @@ pub enum Commands {
         #[command(subcommand)]
         action: ConfigAction,
     },
+    /// Check external dependencies and configuration health
+    Doctor,
     /// Distribution-aware update check/apply
     Update {
         /// Check only, don't install
         #[arg(long)]
         check: bool,
+        /// Bypass the duplicate-run guard
+        #[arg(long)]
+        force: bool,
     },
     /// Hidden: deterministic exit-code trigger for contract tests
     #[command(hide = true)]

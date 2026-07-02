@@ -60,6 +60,12 @@ pub fn run() {
                 "args": [],
                 "options": []
             },
+            "doctor": {
+                "description": "Check external dependencies and configuration health",
+                "args": [],
+                "options": [],
+                "exit_behavior": "0 if no check fails (warnings allowed), 2 if any check fails"
+            },
             "update": {
                 "description": "Distribution-aware update check/apply",
                 "args": [],
@@ -70,6 +76,13 @@ pub fn run() {
                         "required": false,
                         "default": false,
                         "description": "Check only, don't install"
+                    },
+                    {
+                        "name": "--force",
+                        "type": "bool",
+                        "required": false,
+                        "default": false,
+                        "description": "Bypass the duplicate-run guard"
                     }
                 ],
                 "install_sources": [

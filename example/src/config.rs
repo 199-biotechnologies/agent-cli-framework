@@ -77,6 +77,13 @@ pub fn config_path() -> PathBuf {
         .join("config.toml")
 }
 
+/// State directory (lock files, operational data). Deletable with care.
+pub fn data_dir() -> PathBuf {
+    directories::ProjectDirs::from("", "", env!("CARGO_PKG_NAME"))
+        .map(|d| d.data_dir().to_path_buf())
+        .unwrap_or_else(|| PathBuf::from("."))
+}
+
 // ── Loading ────────────────────────────────────────────────────────────────
 
 pub fn load() -> Result<AppConfig, AppError> {

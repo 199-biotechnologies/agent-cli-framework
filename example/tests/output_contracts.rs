@@ -111,6 +111,27 @@ fn version_wrapped_in_envelope_when_piped() {
     assert_eq!(json["status"], "success");
 }
 
+// ── Rich help ──────────────────────────────────────────────────────────────
+
+#[test]
+fn long_help_includes_tips_and_examples() {
+    // Pattern 6: --help carries a Tips and an Examples section so agents can
+    // bootstrap usage without external docs. Check the wrapped JSON form.
+    let out = greeter().arg("--help").output().unwrap();
+    assert!(out.status.success());
+
+    let json: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    let usage = json["data"]["usage"].as_str().unwrap();
+    assert!(
+        usage.contains("Tips:"),
+        "--help must include a Tips section"
+    );
+    assert!(
+        usage.contains("Examples:"),
+        "--help must include an Examples section"
+    );
+}
+
 // ── Quiet flag ─────────────────────────────────────────────────────────────
 
 #[test]

@@ -196,7 +196,7 @@ fn managed_result(
     }
 }
 
-pub fn run(ctx: Ctx, check: bool, config: &AppConfig) -> Result<(), AppError> {
+pub fn run(ctx: Ctx, check: bool, force: bool, config: &AppConfig) -> Result<(), AppError> {
     let current = env!("CARGO_PKG_VERSION");
     let name = env!("CARGO_PKG_NAME");
     let source = detect_install_source(config)?;
@@ -262,6 +262,12 @@ pub fn run(ctx: Ctx, check: bool, config: &AppConfig) -> Result<(), AppError> {
             }
         });
     } else {
+        // Duplicate guard: self-replacement is expensive and must not run
+        // twice concurrently (agent retries, parallel agents). Released on
+        // drop, even on the error paths below.
+        let guard = crate::guard::DuplicateGuard::new(&crate::config::data_dir(), "update");
+        guard.acquire(force)?;
+
         let release = updater
             .update()
             .map_err(|e| AppError::Update(e.to_string()))?;

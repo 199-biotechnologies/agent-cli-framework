@@ -92,6 +92,16 @@ fn config_path_is_routable() {
     greeter().args(["config", "path"]).assert().code(0);
 }
 
+#[test]
+fn doctor_is_routable() {
+    let tmp = tempfile::tempdir().unwrap();
+    greeter()
+        .env("HOME", tmp.path())
+        .arg("doctor")
+        .assert()
+        .code(0);
+}
+
 // ── Enriched schema ────────────────────────────────────────────────────────
 
 #[test]

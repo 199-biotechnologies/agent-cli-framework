@@ -9,11 +9,15 @@
 //!   - `config show/path` for configuration management
 //!   - `skill install` to register with AI agent platforms
 //!   - `update` for distribution-aware update checks
+//!   - Rich help: Tips + Examples via `after_long_help`
+//!   - `doctor` for structured dependency diagnostics
+//!   - Duplicate guard on the update apply path
 
 mod cli;
 mod commands;
 mod config;
 mod error;
+mod guard;
 mod output;
 
 use clap::Parser;
@@ -77,8 +81,9 @@ fn main() {
             ConfigAction::Show => config::load().and_then(|cfg| commands::config::show(ctx, &cfg)),
             ConfigAction::Path => commands::config::path(ctx),
         },
-        Commands::Update { check } => {
-            config::load().and_then(|cfg| commands::update::run(ctx, check, &cfg))
+        Commands::Doctor => commands::doctor::run(ctx),
+        Commands::Update { check, force } => {
+            config::load().and_then(|cfg| commands::update::run(ctx, check, force, &cfg))
         }
         Commands::Contract { code } => commands::contract::run(ctx, code),
     };
